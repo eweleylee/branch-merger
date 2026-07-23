@@ -219,7 +219,11 @@ public class GitService : IGitService
                     LastCommitDate = parts.Length > 2 ? parts[2].Trim() : ""
                 });
             }
-            return list;
+
+            // Show only remote branches. The app operates on remote refs, and local branches
+            // in the dedicated clone are just transient merge byproducts (deleted after each
+            // merge) — listing them would duplicate every branch (local + origin/<name>).
+            return list.Where(b => b.IsRemote).ToList();
         }
         finally { _gate.Release(); }
     }
@@ -248,14 +252,18 @@ public class GitService : IGitService
                 return res;
             }
 
-            // Best-effort: return the clone to the configured resting branch so it
-            // never sits on the target branch after a merge. Never fails the merge.
-            async Task RestOnDefaultBranch()
+            // Best-effort: return the clone to the configured resting branch and delete the
+            // local target branch we created for the merge, so the clone stays clean and only
+            // remote branches remain. Never fails the merge.
+            async Task RestAndCleanup(string targetShort)
             {
                 var def = Cfg.DefaultBranch?.Trim();
-                if (string.IsNullOrWhiteSpace(def)) return;
+                if (string.IsNullOrWhiteSpace(def)) return;   // empty = stay on target; can't delete current branch
                 var defShort = def.StartsWith(remote + "/") ? def[(remote.Length + 1)..] : def;
                 await Step($"checkout {defShort}");
+                // Delete the local target branch (never the resting branch itself).
+                if (!string.Equals(targetShort, defShort, StringComparison.Ordinal))
+                    await Step($"branch -D {targetShort}");
             }
 
             var srcRef = source.StartsWith(remote + "/") ? source : $"{remote}/{source}";
@@ -279,7 +287,7 @@ public class GitService : IGitService
                     .ToList();
 
                 await Step("merge --abort");
-                await RestOnDefaultBranch();
+                await RestAndCleanup(tgtShort);
 
                 var result = Fail(
                     files.Count > 0
@@ -297,7 +305,7 @@ public class GitService : IGitService
                     return Fail("Merge succeeded locally but push to remote failed.", log);
             }
 
-            await RestOnDefaultBranch();
+            await RestAndCleanup(tgtShort);
 
             return new MergeResult
             {

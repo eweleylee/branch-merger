@@ -26,11 +26,15 @@ git checkout -B <target> <remote>/<target>   # ⚠ resets local target to match 
 git merge --no-edit <remote>/<source>
 git push <remote> <target>                    # only if push == true
 git checkout <Git.DefaultBranch>              # best-effort: rest on master, never on target
+git branch -D <target>                        # delete the local target branch (clone stays clean)
 ```
 On conflict: capture unmerged files (`git diff --name-only --diff-filter=U`), run
 `git merge --abort`, return `IsConflict = true` with the file list. **Nothing is pushed.**
 Either way the clone is returned to `Git.DefaultBranch` (default `master`; empty ⇒ stay
-on target) as a best-effort final step that never fails the merge.
+on target) **and the local target branch is deleted** as best-effort final steps that never
+fail the merge — so the clone keeps only remote branches. (If `DefaultBranch` is empty these
+steps are skipped, since you can't delete the branch you're on.) Note: with `push == false`
+the merge lived only in that local branch, so deleting it discards the un-pushed result.
 
 > Because of the `checkout -B` reset, the app must point at a **dedicated working clone**
 > it owns — never a repo edited by hand. `git` must have **non-interactive credentials**
@@ -70,7 +74,9 @@ are Windows-only and only act for an installed (Velopack) build.
   collide (the clone can only be on one branch at a time). Methods: `FetchAsync`,
   `GetBranchesAsync`, `MergeAsync`, `GetRepoStatusAsync`, `EnsureRepositoryAsync` (clone),
   `IsBusy` + `AcquireExclusiveAsync` (wait for git idle / hold the lock — used by the
-  self-updater so an update never interrupts a merge).
+  self-updater so an update never interrupts a merge). `GetBranchesAsync` returns **remote
+  branches only** (local branches in the clone are transient merge byproducts and are
+  deleted after each merge — see below), so the dropdown never shows a branch twice.
 - `BranchCache` + `BranchFetchBackgroundService` — the fetcher polls `git fetch` on the
   configured interval and refreshes the cache; controllers read the cache (fast).
 - `ScheduleStore` — schedules persisted to `schedules.json`.
