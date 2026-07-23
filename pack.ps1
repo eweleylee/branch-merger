@@ -1,12 +1,12 @@
 # Build an installer + auto-update release for Branch Merger using Velopack.
 #
-#   .\pack.ps1                 # build + pack locally into .\releases
+#   .\pack.ps1                        # build + pack locally into .\releases
 #   .\pack.ps1 -Upload -Token <PAT>   # ...then create/upload the GitHub release
 #
 # Prerequisites (one time):
 #   dotnet tool install -g vpk
 #
-# The version comes from <Version> in backend\BranchMerger.Api.csproj — that is the
+# The version comes from <Version> in backend\BranchMerger.Api.csproj -- that is the
 # single source of truth. Bump it there before packing a new release.
 #
 # User data (settings.json / schedules.json / notifications.json) lives in
@@ -46,7 +46,7 @@ npm install
 npm run build
 Pop-Location
 
-# --- Backend publish (self-contained, NOT single-file — Velopack repackages) --
+# --- Backend publish (self-contained, NOT single-file -- Velopack repackages) -
 Write-Host "==> Publishing backend ($Rid, self-contained)"
 if (Test-Path $Publish) { Remove-Item -Recurse -Force $Publish }
 Push-Location $Backend
@@ -61,7 +61,7 @@ New-Item -ItemType Directory -Force -Path $www | Out-Null
 Copy-Item -Recurse -Force (Join-Path $Frontend "dist\*") $www
 
 # --- Pull prior releases so Velopack can build a delta (best-effort) ----------
-Write-Host "==> vpk download (prior releases, for delta — ok if none yet)"
+Write-Host "==> vpk download (prior releases, for delta - ok if none yet)"
 $dl = @("download", "github", "--repoUrl", "https://github.com/$Repo", "--outputDir", $Releases)
 if ($Token) { $dl += @("--token", $Token) }
 try { vpk @dl } catch { }   # first-ever release has nothing to download; ignore
@@ -81,7 +81,7 @@ Write-Host "Release assets are in: $Releases" -ForegroundColor Green
 
 # --- Optional: create + upload the GitHub release -----------------------------
 if ($Upload) {
-  if (-not $Token) { throw "-Upload requires -Token <GitHub PAT with 'repo' scope>" }
+  if (-not $Token) { throw "Upload requires -Token (a GitHub PAT with 'repo' scope)" }
   Write-Host "==> Uploading to GitHub release v$Version"
   vpk upload github `
     --repoUrl     "https://github.com/$Repo" `
@@ -94,5 +94,5 @@ if ($Upload) {
   Write-Host ""
   Write-Host "Not uploaded. To publish this release to GitHub, either:" -ForegroundColor Yellow
   Write-Host "  .\pack.ps1 -Upload -Token <PAT>"
-  Write-Host "  (or create a release for tag v$Version in the GitHub UI and upload every file from '$Releases')"
+  Write-Host "  or create a release for tag v$Version in the GitHub UI and upload every file from the releases folder."
 }
