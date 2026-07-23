@@ -60,11 +60,11 @@ if (Test-Path $www) { Remove-Item -Recurse -Force $www }
 New-Item -ItemType Directory -Force -Path $www | Out-Null
 Copy-Item -Recurse -Force (Join-Path $Frontend "dist\*") $www
 
-# --- Pull prior releases so Velopack can build a delta (best-effort) ----------
-Write-Host "==> vpk download (prior releases, for delta - ok if none yet)"
-$dl = @("download", "github", "--repoUrl", "https://github.com/$Repo", "--outputDir", $Releases)
-if ($Token) { $dl += @("--token", $Token) }
-try { vpk @dl } catch { }   # first-ever release has nothing to download; ignore
+# --- Start fresh: wipe assets from previous versions -------------------------
+# So 'releases' only ever holds the current version's files (full packages, no
+# delta). Auto-update still works; updates just download the full package.
+Write-Host "==> Cleaning $Releases (start fresh)"
+if (Test-Path $Releases) { Remove-Item -Recurse -Force $Releases }
 
 # --- Velopack pack: produces Setup.exe + *-full.nupkg + releases.win.json ------
 Write-Host "==> vpk pack"
