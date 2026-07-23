@@ -47,8 +47,16 @@ auto-update). In production the API also **serves the built Vue app** as static 
 
 **Program.cs** — `VelopackApp.Build().Run()` **as the very first line** (handles
 install/update/uninstall hooks; a no-op under `dotnet run`), then DI registration, CORS
-(dev), static file serving + SPA fallback, auto-opens the browser on start when not in
-Development.
+(dev), static file serving + SPA fallback, applies the run-on-startup preference
+(`WindowsStartup.Apply`), and auto-opens the browser on start when not in Development —
+**unless** launched with `--startup` (the login autostart passes it so boot is quiet).
+
+**Windowless / autostart:** Release/published builds are **`OutputType=WinExe`** (set in the
+csproj) so the installed app runs in the **background with no console window**; Debug
+(`dotnet run`) stays a console app for dev logs. `AppSettings.RunOnStartup` (default true,
+toggle in Settings) registers an `HKCU\...\Run` entry to the current exe on every launch
+(`WindowsStartup`), so it **starts on Windows login and self-heals across updates**. Both
+are Windows-only and only act for an installed (Velopack) build.
 
 **Services/** (all singletons; hold shared state)
 - `AppPaths` — resolves the **per-user data directory** (`%APPDATA%/BranchMerger`,
@@ -235,10 +243,13 @@ compiled in-chat (no .NET SDK there). Verify with `dotnet build` in `backend/` a
 ---
 
 ## Open work (discussed, not yet built) — rough priority
-1. **Windows Service support** — `UseWindowsService()`, suppress browser-launch + switch to
-   file logging when running as a service, `install-service.ps1` / `uninstall-service.ps1`.
-   Solves "hide the console" + "start on Windows startup". Run the service under a user
-   account that has the right git credentials (LocalSystem won't). **(explicitly queued)**
+1. **Windows Service support** — `UseWindowsService()` + `install-service.ps1` /
+   `uninstall-service.ps1`. **Largely superseded:** "hide the console" and "start on Windows
+   startup" are now done via `OutputType=WinExe` + the `HKCU\...\Run` entry (`WindowsStartup`),
+   which also stays compatible with the Velopack auto-updater (a service does not). A real
+   service would only add: running with no user logged in, and it must run under an account
+   that has the git credentials (LocalSystem won't). Consider **file logging** separately now
+   that Release builds are windowless.
 2. **Conflict handling beyond abort** — either "push to `automerge/...` branch + notify" or an
    in-UI resolver with an `AwaitingResolution` repo state (needs a repo-wide lock, or
    `git worktree` for concurrency). Notifications already carry the conflicted files.

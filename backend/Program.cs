@@ -42,7 +42,13 @@ builder.Services.AddCors(o => o.AddPolicy("dev", p =>
 var app = builder.Build();
 
 // Materialise settings on startup so settings.json is created immediately.
-app.Services.GetRequiredService<AppSettingsStore>();
+var settingsStore = app.Services.GetRequiredService<AppSettingsStore>();
+
+// Apply the "run on Windows login" preference (no-op in dev / non-installed / non-Windows).
+// Re-applied here on every launch so it self-heals across updates.
+WindowsStartup.Apply(
+    settingsStore.Current.RunOnStartup,
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("WindowsStartup"));
 
 app.UseCors("dev");
 
@@ -54,8 +60,12 @@ app.UseStaticFiles();
 app.MapControllers();
 app.MapFallbackToFile("index.html");   // let the SPA handle client-side routes / refreshes
 
-// In the packaged (production) build, print the URL and open the browser on start.
-if (!app.Environment.IsDevelopment())
+// Launched at Windows login (via the startup entry) → run quietly, don't pop the browser.
+var isStartupLaunch = args.Contains("--startup");
+
+// In the packaged (production) build, print the URL and open the browser on start
+// (unless this was an automatic startup launch).
+if (!app.Environment.IsDevelopment() && !isStartupLaunch)
 {
     var url = (builder.Configuration["Urls"] ?? "http://localhost:5080").Split(';')[0];
     app.Lifetime.ApplicationStarted.Register(() =>

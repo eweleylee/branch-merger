@@ -13,7 +13,8 @@ const repoStatus = ref(null)
 
 // mirrors backend AppSettings
 const s = ref({
-  git: { repositoryPath: '', repositoryUrl: '', remoteName: 'origin', fetchIntervalSeconds: 60, defaultBranch: 'master' }
+  git: { repositoryPath: '', repositoryUrl: '', remoteName: 'origin', fetchIntervalSeconds: 60, defaultBranch: 'master' },
+  runOnStartup: true
 })
 
 async function load() {
@@ -122,6 +123,16 @@ onMounted(load)
           </div>
         </section>
 
+        <!-- Startup -->
+        <section>
+          <h3>Startup</h3>
+          <label class="check">
+            <input type="checkbox" v-model="s.runOnStartup" />
+            Start automatically when Windows starts
+          </label>
+          <p class="hint">Runs in the background (no console window). Applies to the installed app only.</p>
+        </section>
+
         <div v-if="message" :class="['msg', message.ok ? 'ok' : 'err']">{{ message.text }}</div>
       </div>
 
@@ -173,6 +184,7 @@ h3 { margin: 0 0 12px; font-size: 14px; color: var(--accent); }
 .row-btns { display: flex; gap: 8px; }
 .small { padding: 6px 12px; font-size: 12px; }
 
+.hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 .msg { margin: 14px 0 4px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
 .msg.ok { background: rgba(63,178,127,.12); border: 1px solid var(--accent-2); }
 .msg.err { background: rgba(229,88,77,.12); border: 1px solid var(--danger); }

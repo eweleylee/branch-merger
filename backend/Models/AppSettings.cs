@@ -4,6 +4,12 @@ namespace BranchMerger.Api.Models;
 public class AppSettings
 {
     public GitRepositoryConfig Git { get; set; } = new();
+
+    /// <summary>
+    /// Start the app automatically when Windows starts (per-user). Only takes effect
+    /// for an installed build; ignored in dev / non-Windows.
+    /// </summary>
+    public bool RunOnStartup { get; set; } = true;
 }
 
 /// <summary>Result of checking / preparing the working clone.</summary>

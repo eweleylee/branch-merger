@@ -11,12 +11,15 @@ public class SettingsController : ControllerBase
     private readonly AppSettingsStore _settings;
     private readonly IGitService _git;
     private readonly BranchCache _cache;
+    private readonly ILogger<SettingsController> _log;
 
-    public SettingsController(AppSettingsStore settings, IGitService git, BranchCache cache)
+    public SettingsController(AppSettingsStore settings, IGitService git, BranchCache cache,
+        ILogger<SettingsController> log)
     {
         _settings = settings;
         _git = git;
         _cache = cache;
+        _log = log;
     }
 
     /// <summary>Current settings, with the email password masked.</summary>
@@ -32,6 +35,7 @@ public class SettingsController : ControllerBase
     {
         if (incoming == null) return BadRequest(new { message = "No settings provided." });
         _settings.Update(incoming);
+        WindowsStartup.Apply(incoming.RunOnStartup, _log);   // reflect the toggle immediately
         return Ok(new { settings = _settings.ForDisplay() });
     }
 
