@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+output/
+
+# Frontend build
+node_modules/
+dist/
+.vite/
+
+# Runtime data & secrets (managed via the Settings screen)
+backend/settings.json
+backend/schedules.json
+backend/notifications.json
+output/settings.json
+output/schedules.json
+output/notifications.json
+
+# misc
+.DS_Store
+*.user
