@@ -127,15 +127,18 @@ executable are migrated automatically on first run.)
 The app can tell you when a newer version is published, via GitHub Releases. Set your repo
 in `appsettings.json`:
 ```json
-"UpdateCheck": { "Enabled": true, "GitHubRepo": "owner/repo", "CurrentVersion": "" }
+"UpdateCheck": { "Enabled": true, "GitHubRepo": "eweleylee/branch-merger", "CurrentVersion": "" }
 ```
-- `GitHubRepo` — your repository, e.g. `acme/branch-merger`. Leave blank to turn the check off.
+- `GitHubRepo` — your repository, i.e. `eweleylee/branch-merger`. Leave blank to turn the check off.
 - `CurrentVersion` — leave blank to use the assembly version (`<Version>` in the csproj); set it to override.
 
 On startup the app queries `releases/latest`, compares the tag to its own version, and shows
-an in-app **"Update available"** banner (with a Download link) when a newer release exists.
-To publish an update: bump `<Version>` in the csproj, build, and cut a matching GitHub Release
-tagged `vX.Y.Z`. Results are cached (~6h) to stay under GitHub's rate limit.
+an in-app **"Update available"** banner when a newer release exists. If the app was installed
+via the Velopack installer, the banner shows a one-click **"Update now"** button that downloads
+and applies the update, then restarts; otherwise it shows a Download link to the release.
+To publish an update: bump `<Version>` in the csproj, run `release.bat` (or `pack.ps1` /
+`release.sh`), and cut a matching GitHub Release tagged `vX.Y.Z` with the files from `releases/`.
+Results are cached (~6h) to stay under GitHub's rate limit.
 
 ## API
 | Method | Route | Purpose |

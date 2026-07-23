@@ -7,12 +7,13 @@ const emit = defineEmits(['close', 'saved'])
 const loading = ref(true)
 const saving = ref(false)
 const cloning = ref(false)
+const checking = ref(false)
 const message = ref(null)          // { ok, text }
 const repoStatus = ref(null)
 
 // mirrors backend AppSettings
 const s = ref({
-  git: { repositoryPath: '', repositoryUrl: '', remoteName: 'origin', fetchIntervalSeconds: 60 }
+  git: { repositoryPath: '', repositoryUrl: '', remoteName: 'origin', fetchIntervalSeconds: 60, defaultBranch: 'master' }
 })
 
 async function load() {
@@ -29,8 +30,10 @@ async function load() {
 }
 
 async function checkRepo() {
+  checking.value = true
   try { repoStatus.value = await api.getRepoStatus() }
   catch (e) { repoStatus.value = { ready: false, message: e.message } }
+  finally { checking.value = false }
 }
 
 async function save() {
@@ -99,6 +102,10 @@ onMounted(load)
               <input type="number" min="10" v-model.number="s.git.fetchIntervalSeconds" />
             </div>
           </div>
+          <div class="field">
+            <label>Default branch (checked out after each merge · empty = stay on target)</label>
+            <input type="text" v-model="s.git.defaultBranch" placeholder="master" />
+          </div>
 
           <div class="repo-status" v-if="repoStatus">
             <span :class="['dot', repoStatus.ready ? 'on' : 'off']"></span>
@@ -106,9 +113,11 @@ onMounted(load)
             <span v-if="repoStatus.currentBranch" class="muted"> · on {{ repoStatus.currentBranch }}</span>
           </div>
           <div class="row-btns">
-            <button class="btn-ghost small" @click="checkRepo">Check status</button>
+            <button class="btn-ghost small" :disabled="checking" @click="checkRepo">
+              <span v-if="checking" class="spinner"></span>{{ checking ? 'Checking…' : 'Check status' }}
+            </button>
             <button class="btn-primary small" :disabled="cloning" @click="cloneRepo">
-              {{ cloning ? 'Cloning…' : 'Clone / initialize' }}
+              <span v-if="cloning" class="spinner"></span>{{ cloning ? 'Cloning…' : 'Clone / initialize' }}
             </button>
           </div>
         </section>
@@ -120,7 +129,7 @@ onMounted(load)
         <div class="spacer"></div>
         <button class="btn-ghost" @click="emit('close')">Close</button>
         <button class="btn-primary" :disabled="saving" @click="save">
-          {{ saving ? 'Saving…' : 'Save settings' }}
+          <span v-if="saving" class="spinner"></span>{{ saving ? 'Saving…' : 'Save settings' }}
         </button>
       </div>
     </div>

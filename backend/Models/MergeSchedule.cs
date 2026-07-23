@@ -18,7 +18,7 @@ public class MergeSchedule
 
     public ScheduleType Type { get; set; } = ScheduleType.Once;
     public DateTime? RunAtUtc { get; set; }            // used when Type == Once
-    public string? CronExpression { get; set; }        // used when Type == Cron (UTC)
+    public string? CronExpression { get; set; }        // used when Type == Cron (server local time)
 
     public bool Enabled { get; set; } = true;
 

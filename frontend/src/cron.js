@@ -22,7 +22,7 @@ export function handRolled(expr) {
   const perHour = h.match(/^\*\/(\d+)$/)
   if (/^\d+$/.test(m) && perHour) return { ok: true, text: `Runs every ${perHour[1]} hours at :${two(+m)}` }
   if (/^\d+$/.test(m) && /^\d+$/.test(h)) {
-    const t = `${two(+h)}:${two(+m)} UTC`
+    const t = `${two(+h)}:${two(+m)}`
     if (dom === '*' && dow === '*') return { ok: true, text: `Runs every day at ${t}` }
     if (dow !== '*' && dom === '*') return { ok: true, text: `Runs every ${dow.split(',').map(x => DAYS[+x] || x).join(', ')} at ${t}` }
     if (dom !== '*' && dow === '*') return { ok: true, text: `Runs on day ${dom} of the month at ${t}` }
@@ -64,16 +64,17 @@ function matchField(f, v, mn, mx) {
 export function cronMatches(expr, d) {
   const p = (expr || '').trim().split(/\s+/)
   if (p.length !== 5) return false
-  return matchField(p[0], d.getUTCMinutes(), 0, 59) &&
-    matchField(p[1], d.getUTCHours(), 0, 23) &&
-    matchField(p[2], d.getUTCDate(), 1, 31) &&
-    matchField(p[3], d.getUTCMonth() + 1, 1, 12) &&
-    matchField(p[4], d.getUTCDay(), 0, 6)
+  // Match in local time to mirror the backend (Cronos with TimeZoneInfo.Local).
+  return matchField(p[0], d.getMinutes(), 0, 59) &&
+    matchField(p[1], d.getHours(), 0, 23) &&
+    matchField(p[2], d.getDate(), 1, 31) &&
+    matchField(p[3], d.getMonth() + 1, 1, 12) &&
+    matchField(p[4], d.getDay(), 0, 6)
 }
 export function nextRun(expr) {
-  const d = new Date(); d.setUTCSeconds(0, 0)
+  const d = new Date(); d.setSeconds(0, 0)
   for (let i = 0; i < 60 * 24 * 8; i++) {   // scan up to 8 days ahead
-    d.setUTCMinutes(d.getUTCMinutes() + 1)
+    d.setMinutes(d.getMinutes() + 1)
     if (cronMatches(expr, d)) return d
   }
   return null
@@ -84,7 +85,6 @@ export function formatNext(d) {
   const day = d.toDateString() === now.toDateString() ? 'Today'
     : d.toDateString() === tm.toDateString() ? 'Tomorrow'
     : d.toLocaleDateString()
-  const utc = `${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`
   const loc = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return `next run ${day} ${utc}  ·  = ${loc} your time`
+  return `next run ${day} ${loc} (local time)`
 }

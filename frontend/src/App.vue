@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from './api.js'
 import MergePanel from './components/MergePanel.vue'
 import ScheduleList from './components/ScheduleList.vue'
@@ -9,6 +9,7 @@ import SettingsPanel from './components/SettingsPanel.vue'
 const branches = ref([])
 const branchesUpdatedAt = ref(null)
 const branchError = ref(null)
+const refreshing = ref(false)
 const schedules = ref([])
 const notifications = ref([])
 const unread = ref(0)
@@ -18,6 +19,18 @@ const updateInfo = ref(null)
 const updateDismissed = ref(false)
 const updating = ref(false)
 const updateError = ref(null)
+const updateStartedAt = ref(null)
+const canReload = ref(false)
+
+// Live phase text for the update dialog, taken from the backend's "Update" notifications
+// (emitted as it downloads / waits for a running merge / restarts).
+const updateStatus = computed(() => {
+  if (!updateStartedAt.value) return ''
+  const n = notifications.value.find(
+    x => x.trigger === 'Update' && new Date(x.createdUtc) >= updateStartedAt.value
+  )
+  return n?.message || 'Downloading the update…'
+})
 
 let pollTimer = null
 
@@ -34,15 +47,42 @@ async function loadUpdate() {
 async function applyUpdate() {
   updating.value = true
   updateError.value = null
+  canReload.value = false
+  updateStartedAt.value = new Date(Date.now() - 3000)   // small buffer for clock/poll skew
   try {
     await api.applyUpdate()
-    // The server downloads the update then restarts itself. Give it a moment to
-    // come back up on the new version, then reload this page.
-    setTimeout(() => window.location.reload(), 5000)
+    // The server downloads, waits for any in-flight git op, then restarts. That can
+    // take a while, so poll until it goes down (restarting) and comes back, then reload.
+    watchForRestart()
   } catch (e) {
     updateError.value = e.message
     updating.value = false
   }
+}
+
+function reloadNow() { window.location.reload() }
+
+function watchForRestart() {
+  let sawDown = false
+  let waited = 0
+  const step = 2000
+  const cap = 10 * 60 * 1000   // give up after 10 min (matches server idle-wait timeout)
+  const iv = setInterval(async () => {
+    waited += step
+    try {
+      await api.getUpdate()
+      if (sawDown) { clearInterval(iv); window.location.reload() }   // back up on the new version
+    } catch {
+      sawDown = true   // server unreachable = restarting
+    }
+    // Refresh notifications so the dialog's live status ("waiting"/"installing") stays current.
+    loadNotifications()
+    if (waited >= cap) {
+      clearInterval(iv)
+      updateError.value = 'Update is taking longer than expected. Reload the page once the app has restarted.'
+      canReload.value = true   // keep the dialog open with a manual reload option
+    }
+  }, step)
 }
 
 async function loadBranches() {
@@ -57,12 +97,15 @@ async function loadBranches() {
 }
 
 async function forceRefresh() {
+  refreshing.value = true
   try {
     const data = await api.refreshBranches()
     branches.value = data.branches || []
     branchesUpdatedAt.value = data.lastUpdatedUtc
   } catch (e) {
     branchError.value = e.message
+  } finally {
+    refreshing.value = false
   }
 }
 
@@ -117,17 +160,25 @@ onUnmounted(() => clearInterval(pollTimer))
       </div>
     </header>
 
-    <div v-if="updateInfo && updateInfo.updateAvailable && !updateDismissed" class="update-banner">
-      <template v-if="updating">
-        <span><strong>Updating to {{ updateInfo.latestVersion }}…</strong> the app will restart and this page will reload automatically.</span>
-      </template>
-      <template v-else>
-        <span><strong>Update available</strong> — {{ updateInfo.latestVersion }} (you have {{ updateInfo.currentVersion }}).</span>
-        <button v-if="updateInfo.canSelfUpdate" class="update-now" @click="applyUpdate">Update now</button>
-        <a v-else-if="updateInfo.url" :href="updateInfo.url" target="_blank" rel="noopener" class="link">Download</a>
-        <span v-if="updateError" class="update-err">{{ updateError }}</span>
-        <button class="dismiss" @click="updateDismissed = true" aria-label="Dismiss">✕</button>
-      </template>
+    <div v-if="updateInfo && updateInfo.updateAvailable && !updateDismissed && !updating" class="update-banner">
+      <span><strong>Update available</strong> — {{ updateInfo.latestVersion }} (you have {{ updateInfo.currentVersion }}).</span>
+      <button v-if="updateInfo.canSelfUpdate" class="update-now" @click="applyUpdate">Update now</button>
+      <a v-else-if="updateInfo.url" :href="updateInfo.url" target="_blank" rel="noopener" class="link">Download</a>
+      <span v-if="updateError" class="update-err">{{ updateError }}</span>
+      <button class="dismiss" @click="updateDismissed = true" aria-label="Dismiss">✕</button>
+    </div>
+
+    <!-- Update-in-progress dialog: a blocking overlay so it can't be missed. -->
+    <div v-if="updating" class="update-overlay">
+      <div class="update-modal" role="dialog" aria-modal="true" aria-live="polite">
+        <div v-if="!updateError" class="spinner"></div>
+        <h2>{{ updateError ? 'Update interrupted' : 'Updating Branch Merger' }}</h2>
+        <p v-if="updateInfo" class="ver">Version {{ updateInfo.latestVersion }}</p>
+        <p v-if="!updateError" class="status">{{ updateStatus }}</p>
+        <p v-if="!updateError" class="sub">The app will restart and this page reloads automatically. Please don’t close this window.</p>
+        <p v-if="updateError" class="err">{{ updateError }}</p>
+        <button v-if="canReload" class="btn-primary reload-btn" @click="reloadNow">Reload now</button>
+      </div>
     </div>
 
     <div v-if="repoStatus && !repoStatus.ready" class="banner">
@@ -144,6 +195,7 @@ onUnmounted(() => clearInterval(pollTimer))
       <MergePanel
         :branches="branches"
         :branches-updated-at="branchesUpdatedAt"
+        :refreshing="refreshing"
         @refresh="forceRefresh"
         @scheduled="loadSchedules" />
 
@@ -194,6 +246,28 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.3px; }
   margin-left: auto; background: transparent; border: none; color: var(--muted);
   cursor: pointer; font-size: 14px; padding: 2px 6px;
 }
+
+/* Update-in-progress dialog */
+.update-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(2px);
+  display: grid; place-items: center; padding: 20px;
+}
+.update-modal {
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 14px;
+  padding: 30px 34px; max-width: 440px; text-align: center;
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+.update-modal .spinner {
+  width: 38px; height: 38px; border-width: 3px; margin: 0 auto 18px;
+  color: var(--accent); display: block;
+}
+.update-modal h2 { margin: 0 0 6px; font-size: 20px; }
+.update-modal .ver { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.update-modal .status { margin: 0 0 10px; color: var(--text); font-size: 15px; font-weight: 600; }
+.update-modal .sub { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.update-modal .err { margin: 8px 0 0; color: var(--danger); font-size: 14px; }
+.update-modal .reload-btn { margin-top: 18px; }
 
 .banner {
   background: rgba(224,160,58,.12);

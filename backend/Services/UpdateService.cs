@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using BranchMerger.Api.Models;
 using Velopack;
 using Velopack.Sources;
 
@@ -35,6 +36,8 @@ public class UpdateService
 {
     private readonly IHttpClientFactory _http;
     private readonly ILogger<UpdateService> _log;
+    private readonly IGitService _git;
+    private readonly NotificationService _notify;
     private readonly string _repo;       // "owner/repo"
     private readonly string _repoUrl;    // "https://github.com/owner/repo"
     private readonly string _current;
@@ -44,15 +47,20 @@ public class UpdateService
     private readonly bool _isInstalled;
 
     private static readonly TimeSpan Ttl = TimeSpan.FromHours(6);
+    // How long to wait for an in-flight git op before updating anyway.
+    private static readonly TimeSpan IdleWaitTimeout = TimeSpan.FromMinutes(10);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private UpdateInfo? _cache;
     private DateTime _cacheUntil = DateTime.MinValue;
     private Velopack.UpdateInfo? _pending;   // the Velopack update to apply, if any
 
-    public UpdateService(IConfiguration config, IHttpClientFactory http, ILogger<UpdateService> log)
+    public UpdateService(IConfiguration config, IHttpClientFactory http, ILogger<UpdateService> log,
+        IGitService git, NotificationService notify)
     {
         _http = http;
         _log = log;
+        _git = git;
+        _notify = notify;
         _repo = config["UpdateCheck:GitHubRepo"] ?? "";
         _enabled = (config.GetValue<bool?>("UpdateCheck:Enabled") ?? true) && !string.IsNullOrWhiteSpace(_repo);
         _repoUrl = string.IsNullOrWhiteSpace(_repo) ? "" : $"https://github.com/{_repo}";
@@ -105,9 +113,9 @@ public class UpdateService
     }
 
     /// <summary>
-    /// Downloads the pending update and restarts the app onto the new version.
-    /// Only valid when the app was installed via the Velopack installer.
-    /// The restart is deferred briefly so the HTTP response can flush first.
+    /// Downloads the pending update, then (in the background) waits for any in-flight
+    /// git operation to finish before restarting the app onto the new version — so a
+    /// merge/clone/fetch is never interrupted. Only valid when installed via Velopack.
     /// Returns the version being applied.
     /// </summary>
     public async Task<string> DownloadAndRestartAsync()
@@ -123,15 +131,61 @@ public class UpdateService
         await _mgr.DownloadUpdatesAsync(upd);
         var version = upd.TargetFullRelease.Version.ToString();
 
-        // Defer the restart so this request's response reaches the browser first.
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(750);
-            try { _mgr.ApplyUpdatesAndRestart(upd); }
-            catch (Exception ex) { _log.LogError(ex, "Failed to apply update / restart"); }
-        });
-
+        // Apply out-of-band so this request's response reaches the browser first.
+        _ = Task.Run(() => ApplyWhenIdleAsync(upd, version));
         return version;
+    }
+
+    private async Task ApplyWhenIdleAsync(Velopack.UpdateInfo upd, string version)
+    {
+        try
+        {
+            await Task.Delay(750);   // let the HTTP response flush
+
+            // Don't interrupt a running merge/clone/fetch. Tell the user we're waiting.
+            if (_git.IsBusy)
+                await Notify(NotificationLevel.Info, "Update waiting",
+                    $"Update {version} downloaded. Waiting for the current git operation to finish before restarting…");
+
+            IDisposable? hold = null;
+            try
+            {
+                using var cts = new CancellationTokenSource(IdleWaitTimeout);
+                hold = await _git.AcquireExclusiveAsync(cts.Token);   // blocks until git is idle
+            }
+            catch (OperationCanceledException)
+            {
+                _log.LogWarning("Timed out waiting for git to become idle; updating anyway.");
+                await Notify(NotificationLevel.Warning, "Updating",
+                    $"A git operation is taking a long time. Installing version {version} anyway; the app will restart.");
+            }
+
+            if (hold != null)
+                await Notify(NotificationLevel.Info, "Updating",
+                    $"Installing version {version}. The app will restart now.");
+
+            await Task.Delay(250);   // give the notification a moment to persist
+
+            try { _mgr!.ApplyUpdatesAndRestart(upd); }   // terminates this process
+            finally { hold?.Dispose(); }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Failed to apply update / restart");
+            await Notify(NotificationLevel.Error, "Update failed", ex.Message);
+        }
+    }
+
+    private async Task Notify(NotificationLevel level, string title, string message)
+    {
+        try
+        {
+            await _notify.NotifyAsync(new Notification
+            {
+                Level = level, Title = title, Message = message, Trigger = "Update"
+            });
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "Update notification failed"); }
     }
 
     private async Task<UpdateInfo> CheckViaVelopackAsync()

@@ -10,13 +10,15 @@ const emit = defineEmits(['changed'])
 // Local, mutable copy so drag reordering feels instant; re-synced when props change.
 const groups = ref([])
 const dragCtx = ref(null)   // { groupKey, index }
+const togglingId = ref(null)
+const deletingId = ref(null)
 
 function timeKeyOf(s) {
   return s.type === 'Once' ? `once:${s.runAtUtc}` : `cron:${s.cronExpression}`
 }
 function timeLabelOf(s) {
   if (s.type === 'Once') return `Once · ${s.runAtUtc ? new Date(s.runAtUtc).toLocaleString() : '—'}`
-  return `Recurring · ${s.cronExpression} (UTC)`
+  return `Recurring · ${s.cronExpression} (local time)`
 }
 function nextRunOf(s) {
   return s.nextRunUtc ? new Date(s.nextRunUtc).getTime() : Number.MAX_SAFE_INTEGER
@@ -60,8 +62,16 @@ async function persistOrder() {
   emit('changed')
 }
 
-async function toggle(id) { await api.toggleSchedule(id); emit('changed') }
-async function remove(id) { await api.deleteSchedule(id); emit('changed') }
+async function toggle(id) {
+  togglingId.value = id
+  try { await api.toggleSchedule(id); emit('changed') }
+  finally { togglingId.value = null }
+}
+async function remove(id) {
+  deletingId.value = id
+  try { await api.deleteSchedule(id); emit('changed') }
+  finally { deletingId.value = null }
+}
 
 function fmt(dt) { return dt ? new Date(dt).toLocaleString() : '—' }
 function statusClass(st) { return !st ? '' : (st.startsWith('Success') ? 'ok' : 'err') }
@@ -114,8 +124,12 @@ function statusClass(st) { return !st ? '' : (st.startsWith('Success') ? 'ok' : 
           </span>
 
           <span class="actions">
-            <button class="mini" @click="toggle(s.id)">{{ s.enabled ? 'Pause' : 'Resume' }}</button>
-            <button class="mini danger" @click="remove(s.id)">Delete</button>
+            <button class="mini" :disabled="togglingId===s.id" @click="toggle(s.id)">
+              <span v-if="togglingId===s.id" class="spinner"></span>{{ s.enabled ? 'Pause' : 'Resume' }}
+            </button>
+            <button class="mini danger" :disabled="deletingId===s.id" @click="remove(s.id)">
+              <span v-if="deletingId===s.id" class="spinner"></span>Delete
+            </button>
           </span>
         </div>
       </div>

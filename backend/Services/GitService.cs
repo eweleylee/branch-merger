@@ -11,6 +11,16 @@ public interface IGitService
     Task<MergeResult> MergeAsync(string source, string target, bool push, CancellationToken ct = default);
     Task<RepoStatus> GetRepoStatusAsync(CancellationToken ct = default);
     Task<RepoStatus> EnsureRepositoryAsync(CancellationToken ct = default);
+
+    /// <summary>True while a git operation (fetch/merge/clone) is currently running.</summary>
+    bool IsBusy { get; }
+
+    /// <summary>
+    /// Waits until no git operation is running, then keeps the lock held; dispose the
+    /// returned handle to release it. Used to pause all git activity before an in-place
+    /// update so a merge/clone/fetch is never interrupted.
+    /// </summary>
+    Task<IDisposable> AcquireExclusiveAsync(CancellationToken ct = default);
 }
 
 /// <summary>
@@ -32,6 +42,22 @@ public class GitService : IGitService
     }
 
     private GitRepositoryConfig Cfg => _settings.Current.Git;
+
+    // CurrentCount is 1 when the gate is free, 0 while an op holds it.
+    public bool IsBusy => _gate.CurrentCount == 0;
+
+    public async Task<IDisposable> AcquireExclusiveAsync(CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        return new Releaser(_gate);
+    }
+
+    private sealed class Releaser : IDisposable
+    {
+        private SemaphoreSlim? _gate;
+        public Releaser(SemaphoreSlim gate) => _gate = gate;
+        public void Dispose() { _gate?.Release(); _gate = null; }
+    }
 
     private record GitRun(int ExitCode, string StdOut, string StdErr)
     {
@@ -222,6 +248,16 @@ public class GitService : IGitService
                 return res;
             }
 
+            // Best-effort: return the clone to the configured resting branch so it
+            // never sits on the target branch after a merge. Never fails the merge.
+            async Task RestOnDefaultBranch()
+            {
+                var def = Cfg.DefaultBranch?.Trim();
+                if (string.IsNullOrWhiteSpace(def)) return;
+                var defShort = def.StartsWith(remote + "/") ? def[(remote.Length + 1)..] : def;
+                await Step($"checkout {defShort}");
+            }
+
             var srcRef = source.StartsWith(remote + "/") ? source : $"{remote}/{source}";
             var tgtShort = target.StartsWith(remote + "/") ? target[(remote.Length + 1)..] : target;
             var tgtRef = $"{remote}/{tgtShort}";
@@ -243,6 +279,7 @@ public class GitService : IGitService
                     .ToList();
 
                 await Step("merge --abort");
+                await RestOnDefaultBranch();
 
                 var result = Fail(
                     files.Count > 0
@@ -259,6 +296,8 @@ public class GitService : IGitService
                 if ((await Step($"push {remote} {tgtShort}")).ExitCode != 0)
                     return Fail("Merge succeeded locally but push to remote failed.", log);
             }
+
+            await RestOnDefaultBranch();
 
             return new MergeResult
             {

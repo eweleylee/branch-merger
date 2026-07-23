@@ -41,6 +41,19 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .btn-danger  { background: transparent; border-color: var(--danger); color: var(--danger); }
 .btn-ghost   { background: transparent; }
 
+/* Inline loading spinner — inherits the current text color, so it works on any button. */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 1em; height: 1em;
+  vertical-align: -0.15em;
+  margin-right: 7px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+
 select, input[type="text"], input[type="password"], input[type="number"], input[type="datetime-local"] {
   font: inherit;
   width: 100%;

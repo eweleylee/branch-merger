@@ -10,7 +10,8 @@ This file orients an AI assistant or new developer. For end-user setup see `READ
 
 ## What it does
 - Pick a **source** branch (merge FROM) and **target** branch (merge INTO), e.g. `master → feature/x`.
-- **Merge now**, or schedule it: **once** (a date/time) or **recurring** (a cron expression, UTC).
+- **Merge now**, or schedule it: **once** (a date/time) or **recurring** (a cron expression,
+  interpreted in the **server PC's local timezone**).
 - The backend **fetches branches continuously in the background** so the dropdowns are always current.
 - Schedules run **server-side**, firing even if no browser tab is open.
 - Merge conflicts (and failed scheduled runs) raise an **in-app notification** (the 🔔 bell).
@@ -24,9 +25,12 @@ git fetch <remote> --prune
 git checkout -B <target> <remote>/<target>   # ⚠ resets local target to match remote
 git merge --no-edit <remote>/<source>
 git push <remote> <target>                    # only if push == true
+git checkout <Git.DefaultBranch>              # best-effort: rest on master, never on target
 ```
 On conflict: capture unmerged files (`git diff --name-only --diff-filter=U`), run
 `git merge --abort`, return `IsConflict = true` with the file list. **Nothing is pushed.**
+Either way the clone is returned to `Git.DefaultBranch` (default `master`; empty ⇒ stay
+on target) as a best-effort final step that never fails the merge.
 
 > Because of the `checkout -B` reset, the app must point at a **dedicated working clone**
 > it owns — never a repo edited by hand. `git` must have **non-interactive credentials**
@@ -56,7 +60,9 @@ Development.
 - `IGitService` / `GitService` — shells out to the real `git` CLI (reuses machine
   credentials). **One `SemaphoreSlim` serializes all git ops** so fetch/merge/clone never
   collide (the clone can only be on one branch at a time). Methods: `FetchAsync`,
-  `GetBranchesAsync`, `MergeAsync`, `GetRepoStatusAsync`, `EnsureRepositoryAsync` (clone).
+  `GetBranchesAsync`, `MergeAsync`, `GetRepoStatusAsync`, `EnsureRepositoryAsync` (clone),
+  `IsBusy` + `AcquireExclusiveAsync` (wait for git idle / hold the lock — used by the
+  self-updater so an update never interrupts a merge).
 - `BranchCache` + `BranchFetchBackgroundService` — the fetcher polls `git fetch` on the
   configured interval and refreshes the cache; controllers read the cache (fast).
 - `ScheduleStore` — schedules persisted to `schedules.json`.
@@ -70,8 +76,12 @@ Development.
   and apply updates in place (`CanSelfUpdate = true`, the "Update now" button). When not
   a Velopack install (dev / old portable build) it falls back to a plain GitHub
   `releases/latest` tag comparison so the banner still shows, but self-update is off.
-  `DownloadAndRestartAsync` downloads + `ApplyUpdatesAndRestart` (deferred ~750ms so the
-  HTTP response flushes first).
+  `DownloadAndRestartAsync` downloads, then (in the background) **waits for any in-flight
+  git op to finish** via `IGitService.AcquireExclusiveAsync` before `ApplyUpdatesAndRestart`
+  — so a merge/clone/fetch is never interrupted (10-min timeout, then applies anyway). Posts
+  in-app notifications ("Update waiting" / "Updating") while it waits. `ApplyUpdatesAndRestart`
+  is a hard process exit, so all background workers stop with it; the frontend polls until the
+  server drops and returns, then reloads.
 
 **Controllers/** (`api/...`)
 - `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`.
@@ -98,8 +108,11 @@ variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted
   UI toggle); plus `nextRun`/`formatNext` (client-side minute scan; numeric fields only).
 - `App.vue` — layout, polls every 10s (`getBranches`/`getSchedules`/`getNotifications`),
   banners (repo-not-ready; **update-available** with an **"Update now"** button when
-  `canSelfUpdate`, else a Download link — clicking it calls `applyUpdate()`, shows an
-  "updating… will restart" state, then reloads), header (bell + gear).
+  `canSelfUpdate`, else a Download link). Clicking Update now opens a **blocking modal
+  dialog** (`.update-overlay`) that shows live phase text (`updateStatus`, read from the
+  backend's "Update" notifications: downloading → waiting for a running merge → restarting),
+  then `watchForRestart()` polls until the server drops and returns and reloads. Header
+  (bell + gear).
 - `components/`
   - `MergePanel.vue` — source/target via `BranchSelect`, push toggle, mode segments
     (now / once / cron), live cron echo + next-run, merge/schedule actions, result with
@@ -180,6 +193,8 @@ Config: **everything is edited in the ⚙️ Settings screen at runtime** (persi
 - `Git.RemoteName` = `origin`
 - `Git.FetchIntervalSeconds` = 60
 - `Git.RepositoryPath` = "" (must be set per machine — the dedicated clone)
+- `Git.DefaultBranch` = `master` (checked out after every merge so the clone rests there;
+  empty ⇒ leave it on the target branch)
 - `DataDirectory` = "" (empty ⇒ per-user default)
 - `UpdateCheck.GitHubRepo` = `eweleylee/branch-merger` (the update source; set to
   `owner/repo` — required for the banner and Velopack self-update)
@@ -191,8 +206,11 @@ Config: **everything is edited in the ⚙️ Settings screen at runtime** (persi
 ## Conventions & gotchas
 - **Dedicated clone only** (merge resets local target). **Non-interactive git creds required.**
 - All git ops are **serialized**; there is no per-repo concurrency yet.
-- Cron is **5-field, UTC**. `nextRun` in the UI handles numeric/list/range/step fields but
-  not name-based days (`MON`) or `L`/`#`; cronstrue still describes those in words.
+- Cron is **5-field, interpreted in the server PC's local timezone** (Cronos with
+  `TimeZoneInfo.Local` in `ComputeNextRun`; `NextRunUtc` is still stored/compared as UTC).
+  The UI's `nextRun`/`formatNext` matches in **local** time to mirror this (browser runs
+  on the same PC). `nextRun` handles numeric/list/range/step fields but not name-based days
+  (`MON`) or `L`/`#`; cronstrue still describes those in words.
 - Persistent state = three JSON files in the per-user data dir. **No database.**
 - Notifications are **in-app only** (webhook/email intentionally removed).
 - The TFS remote URL needs a **PAT or cached Windows auth** for non-interactive push/fetch.

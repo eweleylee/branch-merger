@@ -6,7 +6,8 @@ import BranchSelect from './BranchSelect.vue'
 
 const props = defineProps({
   branches: { type: Array, default: () => [] },
-  branchesUpdatedAt: { type: String, default: null }
+  branchesUpdatedAt: { type: String, default: null },
+  refreshing: { type: Boolean, default: false }
 })
 const emit = defineEmits(['refresh', 'scheduled'])
 
@@ -17,7 +18,7 @@ const push = ref(true)
 // mode: 'now' | 'once' | 'cron'
 const mode = ref('now')
 const runAtLocal = ref('')      // datetime-local value (browser local time)
-const cron = ref('0 2 * * *')   // default: every day at 02:00 UTC
+const cron = ref('0 2 * * *')   // default: every day at 02:00 local time
 
 // Live plain-English translation + next run (cronstrue, with built-in fallback).
 const cronInfo = computed(() => describeCron(cron.value))
@@ -94,7 +95,9 @@ function submit() {
       <h2>Merge branches</h2>
       <div class="updated">
         <span v-if="branchesUpdatedAt">branches updated {{ new Date(branchesUpdatedAt).toLocaleTimeString() }}</span>
-        <button class="btn-ghost small" @click="emit('refresh')">↻ Refresh</button>
+        <button class="btn-ghost small" :disabled="refreshing" @click="emit('refresh')">
+          <span v-if="refreshing" class="spinner"></span>{{ refreshing ? 'Refreshing…' : '↻ Refresh' }}
+        </button>
       </div>
     </div>
 
@@ -130,7 +133,7 @@ function submit() {
     </div>
 
     <div v-else-if="mode==='cron'" class="field">
-      <label>Cron expression (UTC · minute hour day month weekday)</label>
+      <label>Cron expression (local time · minute hour day month weekday)</label>
       <input type="text" v-model="cron" placeholder="0 2 * * *" />
 
       <div class="cron-echo" :class="{ bad: !cronInfo.ok }">
@@ -151,7 +154,7 @@ function submit() {
         :class="mode==='now' ? 'btn-success' : 'btn-primary'"
         :disabled="!canSubmit"
         @click="submit">
-        <span v-if="busy">Working…</span>
+        <span v-if="busy"><span class="spinner"></span>Working…</span>
         <span v-else-if="mode==='now'">Merge now</span>
         <span v-else>Create schedule</span>
       </button>

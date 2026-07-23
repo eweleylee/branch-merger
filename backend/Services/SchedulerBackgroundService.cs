@@ -105,6 +105,9 @@ public class SchedulerBackgroundService : BackgroundService
             return null;
 
         var cron = CronExpression.Parse(s.CronExpression);
-        return cron.GetNextOccurrence(fromUtc, TimeZoneInfo.Utc);
+        // Interpret the expression in the server PC's local timezone (Cronos still
+        // returns a UTC instant, so NextRunUtc / comparisons stay correct). DST, if
+        // the local zone has any, is handled by Cronos.
+        return cron.GetNextOccurrence(fromUtc, TimeZoneInfo.Local);
     }
 }
