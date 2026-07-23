@@ -30,6 +30,7 @@ builder.Services.AddSingleton<NotificationService>();
 // --- Background workers ---
 builder.Services.AddHostedService<BranchFetchBackgroundService>();   // constantly fetch branches
 builder.Services.AddHostedService<SchedulerBackgroundService>();     // run scheduled merges
+builder.Services.AddHostedService<UpdateCheckBackgroundService>();   // hourly update check
 
 // --- Web ---
 builder.Services.AddControllers();

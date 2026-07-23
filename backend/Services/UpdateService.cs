@@ -53,6 +53,7 @@ public class UpdateService
     private UpdateInfo? _cache;
     private DateTime _cacheUntil = DateTime.MinValue;
     private Velopack.UpdateInfo? _pending;   // the Velopack update to apply, if any
+    private string? _notifiedVersion;        // raise the "update available" alert once per version
 
     public UpdateService(IConfiguration config, IHttpClientFactory http, ILogger<UpdateService> log,
         IGitService git, NotificationService notify)
@@ -107,9 +108,23 @@ public class UpdateService
             if (!force && _cache != null && DateTime.UtcNow < _cacheUntil) return _cache;
             _cache = _isInstalled ? await CheckViaVelopackAsync() : await CheckViaGitHubApiAsync(ct);
             _cacheUntil = DateTime.UtcNow.Add(Ttl);
+            await MaybeNotifyAvailableAsync(_cache);
             return _cache;
         }
         finally { _gate.Release(); }
+    }
+
+    /// <summary>Raise an in-app alert the first time a given new version is detected.</summary>
+    private async Task MaybeNotifyAvailableAsync(UpdateInfo info)
+    {
+        if (!info.UpdateAvailable || string.IsNullOrEmpty(info.LatestVersion)) return;
+        if (info.LatestVersion == _notifiedVersion) return;   // already told the user
+        _notifiedVersion = info.LatestVersion;
+        var how = info.CanSelfUpdate
+            ? "Click \"Update now\" in the app to install it."
+            : "Download it from the GitHub release.";
+        await Notify(NotificationLevel.Info, "Update available",
+            $"Version {info.LatestVersion} is available (you have {info.CurrentVersion}). {how}");
     }
 
     /// <summary>

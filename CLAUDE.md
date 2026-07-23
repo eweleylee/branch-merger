@@ -81,7 +81,11 @@ Development.
   — so a merge/clone/fetch is never interrupted (10-min timeout, then applies anyway). Posts
   in-app notifications ("Update waiting" / "Updating") while it waits. `ApplyUpdatesAndRestart`
   is a hard process exit, so all background workers stop with it; the frontend polls until the
-  server drops and returns, then reloads.
+  server drops and returns, then reloads. On each fresh check it also raises an "Update
+  available" notification **once per new version** (`MaybeNotifyAvailableAsync`).
+- `UpdateCheckBackgroundService` — re-checks GitHub **hourly** (`GetAsync(force:true)`) so a
+  long-running instance surfaces the banner/notification without a page reload. The frontend
+  also re-checks hourly. First check ~20s after startup.
 
 **Controllers/** (`api/...`)
 - `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`.

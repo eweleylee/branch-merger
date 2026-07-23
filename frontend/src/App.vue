@@ -33,6 +33,7 @@ const updateStatus = computed(() => {
 })
 
 let pollTimer = null
+let updateTimer = null
 
 async function loadRepoStatus() {
   try { repoStatus.value = await api.getRepoStatus() }
@@ -134,6 +135,9 @@ onMounted(() => {
     loadSchedules()
     loadNotifications()
   }, 10000)
+  // Re-check for a new release hourly so a long-open tab shows the banner without a reload
+  // (the backend also checks hourly and raises a bell notification).
+  updateTimer = setInterval(loadUpdate, 60 * 60 * 1000)
 })
 
 function onSettingsSaved() {
@@ -141,7 +145,7 @@ function onSettingsSaved() {
   forceRefresh()
 }
 
-onUnmounted(() => clearInterval(pollTimer))
+onUnmounted(() => { clearInterval(pollTimer); clearInterval(updateTimer) })
 </script>
 
 <template>
