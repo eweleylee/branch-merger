@@ -37,11 +37,14 @@ On conflict: capture unmerged files (`git diff --name-only --diff-filter=U`), ru
 ## Architecture
 
 ### Backend (`backend/`, .NET 8, ASP.NET Core Web API)
-Single dependency: **Cronos** (cron parsing). In production the API also **serves the
-built Vue app** as static files (single-server mode) on `http://localhost:5080`.
+Dependencies: **Cronos** (cron parsing) and **Velopack** (installer + in-app
+auto-update). In production the API also **serves the built Vue app** as static files
+(single-server mode) on `http://localhost:5080`.
 
-**Program.cs** — DI registration, CORS (dev), static file serving + SPA fallback,
-auto-opens the browser on start when not in Development.
+**Program.cs** — `VelopackApp.Build().Run()` **as the very first line** (handles
+install/update/uninstall hooks; a no-op under `dotnet run`), then DI registration, CORS
+(dev), static file serving + SPA fallback, auto-opens the browser on start when not in
+Development.
 
 **Services/** (all singletons; hold shared state)
 - `AppPaths` — resolves the **per-user data directory** (`%APPDATA%/BranchMerger`,
@@ -62,8 +65,13 @@ auto-opens the browser on start when not in Development.
 - `NotificationStore` — capped in-app feed persisted to `notifications.json`.
 - `NotificationChannels` (`INotificationChannel` + `InAppChannel`) — **in-app only**
   (webhook/email were removed). `NotificationService` fans out (currently just in-app).
-- `UpdateService` — queries GitHub `releases/latest`, compares to the app version,
-  caches ~6h.
+- `UpdateService` — dual-mode update check, cached ~6h. When the app was installed via
+  the **Velopack** installer it uses `UpdateManager` + `GithubSource` to detect, download
+  and apply updates in place (`CanSelfUpdate = true`, the "Update now" button). When not
+  a Velopack install (dev / old portable build) it falls back to a plain GitHub
+  `releases/latest` tag comparison so the banner still shows, but self-update is off.
+  `DownloadAndRestartAsync` downloads + `ApplyUpdatesAndRestart` (deferred ~750ms so the
+  HTTP response flushes first).
 
 **Controllers/** (`api/...`)
 - `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`.
@@ -71,7 +79,8 @@ auto-opens the browser on start when not in Development.
 - `SchedulesController` — CRUD + `PUT /api/schedules/reorder` + `POST /{id}/toggle`.
 - `NotificationsController` — feed, read-all, clear, `POST /api/notifications/test`.
 - `SettingsController` — `GET/PUT /api/settings`, `GET /api/settings/repo-status`, `POST /api/settings/clone`.
-- `UpdateController` — `GET /api/update`, `POST /api/update/check`.
+- `UpdateController` — `GET /api/update`, `POST /api/update/check`,
+  `POST /api/update/apply` (download + apply + restart; Velopack installs only).
 
 **Models/** — `GitRepositoryConfig`, `AppSettings`, `RepoStatus`, `BranchInfo`,
 `MergeRequest`, `MergeResult` (`IsConflict`, `ConflictedFiles`), `MergeSchedule`
@@ -88,7 +97,9 @@ variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted
 - `cron.js` — `describeCron(expr)` = **cronstrue with a hand-rolled fallback** (auto, no
   UI toggle); plus `nextRun`/`formatNext` (client-side minute scan; numeric fields only).
 - `App.vue` — layout, polls every 10s (`getBranches`/`getSchedules`/`getNotifications`),
-  banners (update-available, repo-not-ready), header (bell + gear).
+  banners (repo-not-ready; **update-available** with an **"Update now"** button when
+  `canSelfUpdate`, else a Download link — clicking it calls `applyUpdate()`, shows an
+  "updating… will restart" state, then reloads), header (bell + gear).
 - `components/`
   - `MergePanel.vue` — source/target via `BranchSelect`, push toggle, mode segments
     (now / once / cron), live cron echo + next-run, merge/schedule actions, result with
@@ -119,7 +130,7 @@ cd backend  && dotnet run          # API on :5080
 cd frontend && npm install && npm run dev   # UI on :5173 (proxies /api)
 ```
 
-**Production (one folder, single-server):**
+**Production — portable (one folder, single-server):**
 ```
 ./build.sh            # or .\build.ps1   (framework-dependent; needs .NET 8 runtime)
 ./build.sh osx-arm64  # or a RID for a self-contained single-file build
@@ -127,10 +138,40 @@ cd frontend && npm install && npm run dev   # UI on :5173 (proxies /api)
 Produces `output/` (published API + `wwwroot/` with the built UI) and a launcher
 (`Start.bat` / `Start.command` / `start.sh`). Serves UI + API on `:5080` and opens the
 browser. **`build.sh` deletes `output/` first — that's safe now because data lives in the
-per-user directory, not `output/`.**
+per-user directory, not `output/`.** The portable build shows the update banner but
+**cannot self-update** (it's not a Velopack install) — use it for dev/testing, not for
+the shipped installer.
+
+**Production — installer + auto-update (Windows, Velopack):**
+```
+dotnet tool install -g vpk         # one time
+.\pack.ps1                          # build + pack into .\releases (no upload)
+.\pack.ps1 -Upload -Token <PAT>     # ...also create + upload the GitHub release
+```
+`pack.ps1` reads `<Version>` from the csproj (single source of truth — bump it per
+release), builds the frontend, publishes the backend **self-contained win-x64**
+(NOT single-file — Velopack repackages), copies the UI into `wwwroot/`, then runs
+`vpk pack` → `releases/` with `Setup.exe` + `*-full.nupkg` + `releases.win.json`.
+Velopack installs **per-user** to `%LocalAppData%\BranchMerger` (no admin), so the
+in-app **"Update now"** button downloads + applies + restarts without a prompt. See
+"Release / update flow" below.
 
 Config: **everything is edited in the ⚙️ Settings screen at runtime** (persisted to
 `settings.json`); `appsettings.json` only seeds first-run defaults.
+
+### Release / update flow (Velopack)
+1. Bump `<Version>` in `backend/BranchMerger.Api.csproj` (e.g. `1.0.0` → `1.0.1`).
+2. `.\pack.ps1 -Upload -Token <PAT>` — publishes GitHub release `v<Version>`.
+   The **git tag must match `<Version>`** (`v1.0.1` ↔ `1.0.1`), and **every** file in
+   `releases/` must be uploaded (the `releases.win.json` manifest is what installed apps
+   read). Manual alternative: create the release in the GitHub UI and drag in all of
+   `releases/`.
+3. Installed copies poll `UpdateCheck.GitHubRepo`, see the newer version, and show
+   "Update now" → one click updates in place.
+4. **User data is never touched** — the three JSON files live in
+   `%APPDATA%\BranchMerger`, separate from the `%LocalAppData%\BranchMerger` program dir.
+5. The **first** install must come from a Velopack `Setup.exe` (not the portable folder),
+   otherwise self-update stays off.
 
 ---
 
@@ -140,8 +181,12 @@ Config: **everything is edited in the ⚙️ Settings screen at runtime** (persi
 - `Git.FetchIntervalSeconds` = 60
 - `Git.RepositoryPath` = "" (must be set per machine — the dedicated clone)
 - `DataDirectory` = "" (empty ⇒ per-user default)
-- `UpdateCheck.GitHubRepo` = "" (**set to `owner/repo` to enable the update banner**)
-- `UpdateCheck.CurrentVersion` = "" (empty ⇒ assembly version, `<Version>` in the csproj = 1.0.0)
+- `UpdateCheck.GitHubRepo` = `eweleylee/branch-merger` (the update source; set to
+  `owner/repo` — required for the banner and Velopack self-update)
+- `UpdateCheck.Prerelease` = `false` (set `true` to also offer pre-release tags)
+- `UpdateCheck.CurrentVersion` = "" — **leave empty.** Version priority is: this override
+  → the installed (Velopack) version → assembly version (`<Version>` in the csproj = 1.0.0).
+  Only set it to force a version for testing the banner.
 
 ## Conventions & gotchas
 - **Dedicated clone only** (merge resets local target). **Non-interactive git creds required.**
@@ -152,6 +197,10 @@ Config: **everything is edited in the ⚙️ Settings screen at runtime** (persi
 - Notifications are **in-app only** (webhook/email intentionally removed).
 - The TFS remote URL needs a **PAT or cached Windows auth** for non-interactive push/fetch.
 - When editing shared components, **update the demo copy too** (or re-copy).
+- **Updates:** the version lives in `<Version>` in the csproj (single source of truth);
+  bump it before every release. Ship via `pack.ps1` (Velopack), and **upload all files in
+  `releases/`** — the `releases.win.json` manifest is required. Self-update only works for
+  apps installed from a Velopack `Setup.exe`.
 
 ---
 
@@ -180,4 +229,10 @@ compiled in-chat (no .NET SDK there). Verify with `dotnet build` in `backend/` a
 6. **SQLite/EF Core** alternative to the JSON stores — only needed for multi-instance or
    history/reporting. Storage is already isolated behind the three `*Store` classes.
 7. **Docker** packaging (mount the clone + data dir as volumes).
-8. Minor: hide number-input spinners; auto-apply updates (currently notify + link only).
+8. **CI release workflow** — a GitHub Actions job that runs `vpk pack` + `vpk upload
+   github` on a version tag, so publishing a release is fully automated (currently
+   `pack.ps1` is run by hand).
+9. Minor: hide number-input spinners.
+
+**Done since:** in-app auto-update — one-click "Update now" (download + apply + restart)
+via **Velopack**, plus the `pack.ps1` installer/release pipeline. See "Build & run".

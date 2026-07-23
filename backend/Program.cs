@@ -1,5 +1,11 @@
 using System.Diagnostics;
 using BranchMerger.Api.Services;
+using Velopack;
+
+// MUST run first. Handles Velopack install/update/uninstall hooks (special CLI
+// args) and exits early for those; a harmless no-op under `dotnet run` / portable
+// builds. Everything else only runs for a normal launch.
+VelopackApp.Build().Run();
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -11,6 +11,7 @@
   <ItemGroup>
     <!-- Cron expression parsing for recurring schedules -->
     <PackageReference Include="Cronos" Version="0.8.4" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
 </Project>

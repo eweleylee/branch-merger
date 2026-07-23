@@ -16,6 +16,8 @@ const showSettings = ref(false)
 const repoStatus = ref(null)
 const updateInfo = ref(null)
 const updateDismissed = ref(false)
+const updating = ref(false)
+const updateError = ref(null)
 
 let pollTimer = null
 
@@ -27,6 +29,20 @@ async function loadRepoStatus() {
 async function loadUpdate() {
   try { updateInfo.value = await api.getUpdate() }
   catch { /* ignore */ }
+}
+
+async function applyUpdate() {
+  updating.value = true
+  updateError.value = null
+  try {
+    await api.applyUpdate()
+    // The server downloads the update then restarts itself. Give it a moment to
+    // come back up on the new version, then reload this page.
+    setTimeout(() => window.location.reload(), 5000)
+  } catch (e) {
+    updateError.value = e.message
+    updating.value = false
+  }
 }
 
 async function loadBranches() {
@@ -102,9 +118,16 @@ onUnmounted(() => clearInterval(pollTimer))
     </header>
 
     <div v-if="updateInfo && updateInfo.updateAvailable && !updateDismissed" class="update-banner">
-      <span><strong>Update available</strong> — {{ updateInfo.latestVersion }} (you have {{ updateInfo.currentVersion }}).</span>
-      <a v-if="updateInfo.url" :href="updateInfo.url" target="_blank" rel="noopener" class="link">Download</a>
-      <button class="dismiss" @click="updateDismissed = true" aria-label="Dismiss">✕</button>
+      <template v-if="updating">
+        <span><strong>Updating to {{ updateInfo.latestVersion }}…</strong> the app will restart and this page will reload automatically.</span>
+      </template>
+      <template v-else>
+        <span><strong>Update available</strong> — {{ updateInfo.latestVersion }} (you have {{ updateInfo.currentVersion }}).</span>
+        <button v-if="updateInfo.canSelfUpdate" class="update-now" @click="applyUpdate">Update now</button>
+        <a v-else-if="updateInfo.url" :href="updateInfo.url" target="_blank" rel="noopener" class="link">Download</a>
+        <span v-if="updateError" class="update-err">{{ updateError }}</span>
+        <button class="dismiss" @click="updateDismissed = true" aria-label="Dismiss">✕</button>
+      </template>
     </div>
 
     <div v-if="repoStatus && !repoStatus.ready" class="banner">
@@ -160,6 +183,13 @@ h1 { margin: 0; font-size: 26px; letter-spacing: -.3px; }
   color: #cfe0ff; padding: 10px 14px; border-radius: 8px; font-size: 14px;
 }
 .update-banner .link { color: var(--accent); text-decoration: underline; }
+.update-banner .update-now {
+  background: var(--accent); border: none; color: #fff;
+  padding: 5px 12px; border-radius: 6px; font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.update-banner .update-now:hover { filter: brightness(1.08); }
+.update-banner .update-err { color: var(--danger); font-size: 13px; }
 .update-banner .dismiss {
   margin-left: auto; background: transparent; border: none; color: var(--muted);
   cursor: pointer; font-size: 14px; padding: 2px 6px;

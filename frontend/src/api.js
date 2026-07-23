@@ -52,5 +52,6 @@ export const api = {
   getRepoStatus: () => req('/api/settings/repo-status'),
   cloneRepo: () => req('/api/settings/clone', { method: 'POST' }),
 
-  getUpdate: () => req('/api/update')
+  getUpdate: () => req('/api/update'),
+  applyUpdate: () => req('/api/update/apply', { method: 'POST' })
 }
