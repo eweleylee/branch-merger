@@ -13,6 +13,16 @@ velopackApp.Run();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- File logging → daily files in the data dir (level from FileLog:MinimumLevel) ---
+// Errors incl. merge conflicts (logged at Error) are captured. Useful now Release builds
+// are windowless. Old files pruned by a background worker.
+if (builder.Configuration.GetValue("FileLog:Enabled", true))
+{
+    var logDir = Path.Combine(AppPaths.ResolveDataDirectory(builder.Configuration), "logs");
+    var minLevel = builder.Configuration.GetValue("FileLog:MinimumLevel", LogLevel.Error);
+    builder.Logging.AddProvider(new FileLoggerProvider(logDir, minLevel));
+}
+
 // --- Runtime settings (persisted to a stable per-user data dir) ---
 builder.Services.AddSingleton<AppPaths>();
 builder.Services.AddSingleton<AppSettingsStore>();
@@ -35,6 +45,7 @@ builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddHostedService<BranchFetchBackgroundService>();   // constantly fetch branches
 builder.Services.AddHostedService<SchedulerBackgroundService>();     // run scheduled merges
 builder.Services.AddHostedService<UpdateCheckBackgroundService>();   // hourly update check
+builder.Services.AddHostedService<LogMaintenanceBackgroundService>(); // prune logs > retention
 
 // --- Web ---
 builder.Services.AddControllers();

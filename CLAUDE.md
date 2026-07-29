@@ -102,6 +102,15 @@ are Windows-only and only act for an installed (Velopack) build.
 - `UpdateCheckBackgroundService` — re-checks GitHub **hourly** (`GetAsync(force:true)`) so a
   long-running instance surfaces the banner/notification without a page reload. The frontend
   also re-checks hourly. First check ~20s after startup.
+- `FileLoggerProvider` / `FileLogger` (`FileLogging.cs`) — a tiny dependency-free
+  `ILoggerProvider` that writes entries at/above `FileLog.MinimumLevel` (default **`Error`**)
+  to one file per day: `{DataDir}/logs/log-yyyy-MM-dd.txt`. Registered in `Program.cs`
+  **before** the DI container (so it uses `AppPaths.ResolveDataDirectory` directly). Config in
+  `FileLog` (`Enabled`, `MinimumLevel`, `RetentionDays`). Merge conflicts **and** failures are
+  logged at **`Error`** in `GitService.MergeAsync` (so they're captured even at the Error-only
+  default), across all merge paths (instant/stream/scheduled).
+- `LogMaintenanceBackgroundService` — silently prunes `logs/log-*.txt` older than
+  `RetentionDays` (default 30) on startup and every 12h (`LogCleanup.Run`).
 
 **Controllers/** (`api/...`)
 - `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`.
@@ -112,6 +121,8 @@ are Windows-only and only act for an installed (Velopack) build.
 - `SettingsController` — `GET/PUT /api/settings`, `GET /api/settings/repo-status`, `POST /api/settings/clone`.
 - `UpdateController` — `GET /api/update`, `POST /api/update/check`,
   `POST /api/update/apply` (download + apply + restart; Velopack installs only).
+- `LogsController` — `GET /api/logs` (daily files newest-first), `GET /api/logs/{name}`
+  (that day's entries parsed newest-first; name is regex-validated against path traversal).
 
 **Models/** — `GitRepositoryConfig`, `AppSettings`, `RepoStatus`, `BranchInfo`,
 `MergeRequest`, `MergeResult` (`IsConflict`, `ConflictedFiles`), `MergeSchedule`
@@ -133,7 +144,7 @@ variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted
   dialog** (`.update-overlay`) that shows live phase text (`updateStatus`, read from the
   backend's "Update" notifications: downloading → waiting for a running merge → restarting),
   then `watchForRestart()` polls until the server drops and returns and reloads. Header
-  (bell + gear).
+  (bell + 📄 logs + gear).
 - `components/`
   - `MergePanel.vue` — source/target via `BranchSelect`, push toggle, mode segments
     (now / once / cron), live cron echo + next-run, merge/schedule actions, result with
@@ -147,6 +158,8 @@ variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted
   - `ScheduleList.vue` — rows **grouped by run time**; **drag-to-reorder within a same-time
     group** (order only matters for same-time schedules); horizontally scrollable on mobile.
   - `NotificationBell.vue` — in-app feed dropdown (✕ + backdrop close, responsive).
+  - `LogViewer.vue` — modal (📄 header button) to browse the daily log files; date selector
+    (newest first), entries **newest-first** with level badges, capped to the 3000 most recent.
   - `SettingsPanel.vue` — **Repository section only** (path, URL, remote, fetch interval,
     Check status / Clone). Webhook/email sections were removed.
 
@@ -239,6 +252,10 @@ Config: **everything is edited in the ⚙️ Settings screen at runtime** (persi
 - `UpdateCheck.CurrentVersion` = "" — **leave empty.** Version priority is: this override
   → the installed (Velopack) version → assembly version (`<Version>` in the csproj = 1.0.0).
   Only set it to force a version for testing the banner.
+- `FileLog.Enabled` = `true`, `FileLog.MinimumLevel` = `Error`, `FileLog.RetentionDays` = `30`
+  — daily log files in `{DataDir}/logs`; entries at/above the level are written (merge
+  conflicts/failures are logged at `Error`, so they're captured), and files older than the
+  retention window are pruned in the background.
 
 ## Conventions & gotchas
 - **Dedicated clone only** (merge resets local target). **Non-interactive git creds required.**
@@ -273,8 +290,8 @@ compiled in-chat (no .NET SDK there). Verify with `dotnet build` in `backend/` a
    startup" are now done via `OutputType=WinExe` + the `HKCU\...\Run` entry (`WindowsStartup`),
    which also stays compatible with the Velopack auto-updater (a service does not). A real
    service would only add: running with no user logged in, and it must run under an account
-   that has the git credentials (LocalSystem won't). Consider **file logging** separately now
-   that Release builds are windowless.
+   that has the git credentials (LocalSystem won't). (**File logging is now done** — daily
+   files in `{DataDir}/logs`, 30-day retention; see `FileLogging.cs`.)
 2. **Conflict handling beyond abort** — either "push to `automerge/...` branch + notify" or an
    in-UI resolver with an `AwaitingResolution` repo state (needs a repo-wide lock, or
    `git worktree` for concurrency). Notifications already carry the conflicted files.

@@ -94,5 +94,8 @@ export const api = {
   cloneRepo: () => req('/api/settings/clone', { method: 'POST' }),
 
   getUpdate: () => req('/api/update'),
-  applyUpdate: () => req('/api/update/apply', { method: 'POST' })
+  applyUpdate: () => req('/api/update/apply', { method: 'POST' }),
+
+  getLogs: () => req('/api/logs'),
+  getLog: (name) => req('/api/logs/' + encodeURIComponent(name))
 }

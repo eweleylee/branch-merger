@@ -6,6 +6,7 @@ import MergePanel from './components/MergePanel.vue'
 import ScheduleList from './components/ScheduleList.vue'
 import NotificationBell from './components/NotificationBell.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
+import LogViewer from './components/LogViewer.vue'
 
 const branches = ref([])
 const branchesUpdatedAt = ref(null)
@@ -15,6 +16,7 @@ const schedules = ref([])
 const notifications = ref([])
 const unread = ref(0)
 const showSettings = ref(false)
+const showLogs = ref(false)
 const repoStatus = ref(null)
 const updateInfo = ref(null)
 const updateDismissed = ref(false)
@@ -161,6 +163,7 @@ onUnmounted(() => { clearInterval(pollTimer); clearInterval(updateTimer) })
           :items="notifications"
           :unread="unread"
           @changed="loadNotifications" />
+        <button class="gear" :disabled="busy" @click="showLogs = true" aria-label="View logs" title="View logs">📄</button>
         <button class="gear" :disabled="busy" @click="showSettings = true" aria-label="Settings">⚙️</button>
       </div>
     </header>
@@ -217,6 +220,8 @@ onUnmounted(() => { clearInterval(pollTimer); clearInterval(updateTimer) })
       v-if="showSettings"
       @close="showSettings = false"
       @saved="onSettingsSaved" />
+
+    <LogViewer v-if="showLogs" @close="showLogs = false" />
   </div>
 </template>
 
