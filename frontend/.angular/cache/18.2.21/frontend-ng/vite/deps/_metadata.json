@@ -1,0 +1,49 @@
+{
+  "hash": "8efb95c0",
+  "configHash": "d6819c57",
+  "lockfileHash": "9199f74d",
+  "browserHash": "957e3729",
+  "optimized": {
+    "@angular/common": {
+      "src": "../../../../../../node_modules/@angular/common/fesm2022/common.mjs",
+      "file": "@angular_common.js",
+      "fileHash": "56594021",
+      "needsInterop": false
+    },
+    "@angular/core": {
+      "src": "../../../../../../node_modules/@angular/core/fesm2022/core.mjs",
+      "file": "@angular_core.js",
+      "fileHash": "3476c00d",
+      "needsInterop": false
+    },
+    "@angular/forms": {
+      "src": "../../../../../../node_modules/@angular/forms/fesm2022/forms.mjs",
+      "file": "@angular_forms.js",
+      "fileHash": "be3c9e2b",
+      "needsInterop": false
+    },
+    "@angular/platform-browser": {
+      "src": "../../../../../../node_modules/@angular/platform-browser/fesm2022/platform-browser.mjs",
+      "file": "@angular_platform-browser.js",
+      "fileHash": "1f636b48",
+      "needsInterop": false
+    },
+    "cronstrue": {
+      "src": "../../../../../../node_modules/cronstrue/dist/cronstrue.js",
+      "file": "cronstrue.js",
+      "fileHash": "60e04ac3",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "chunk-556BJZCM": {
+      "file": "chunk-556BJZCM.js"
+    },
+    "chunk-F7T25POI": {
+      "file": "chunk-F7T25POI.js"
+    },
+    "chunk-3OV72XIM": {
+      "file": "chunk-3OV72XIM.js"
+    }
+  }
+}
