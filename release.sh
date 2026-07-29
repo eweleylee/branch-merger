@@ -68,8 +68,29 @@ vpk pack \
   --packTitle   "Branch Merger" \
   --outputDir   "$RELEASES"
 
+# --- folder-picker install bundle (tiny launcher + Setup, zipped → one download) --
+INSTALLER="$ROOT/installer"
+SETUP_EXE="$RELEASES/BranchMerger-win-Setup.exe"
+if [ -f "$SETUP_EXE" ]; then
+  echo "==> Building install bundle (folder picker)"
+  STAGE="$INSTALLER/stage"
+  rm -rf "$STAGE"; mkdir -p "$STAGE"
+  cp -f "$INSTALLER/Install-BranchMerger.ps1" "$STAGE/"
+  cp -f "$INSTALLER/Install Branch Merger.cmd" "$STAGE/"
+  cp -f "$SETUP_EXE" "$STAGE/"
+  ZIP="$RELEASES/BranchMerger-Installer.zip"
+  rm -f "$ZIP"
+  if command -v zip >/dev/null 2>&1; then
+    ( cd "$STAGE" && zip -q -r "$ZIP" . )
+  else
+    powershell -NoProfile -Command "Compress-Archive -Path '$STAGE/*' -DestinationPath '$ZIP' -Force"
+  fi
+  rm -rf "$STAGE"
+fi
+
 echo ""
 echo "Done. Release assets for v$VERSION are in:  $RELEASES"
+echo "First-install with folder picker: BranchMerger-Installer.zip (extract, run 'Install Branch Merger.cmd')"
 echo ""
 echo "Next (manual): GitHub -> Releases -> Draft a new release"
 echo "  * Tag:  v$VERSION   (must match <Version>)"

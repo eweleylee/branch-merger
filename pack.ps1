@@ -76,8 +76,28 @@ vpk pack `
   --packTitle   "Branch Merger" `
   --outputDir   $Releases
 
+# --- Folder-picker install bundle (tiny launcher + Setup, zipped → one download) --
+# Uses Windows' built-in PowerShell/.NET for the folder dialog, so there's no runtime
+# to bundle — the zip is basically just Setup.exe plus a ~2 KB script.
+$Installer = Join-Path $Root "installer"
+$SetupExe  = Join-Path $Releases "BranchMerger-win-Setup.exe"
+if (Test-Path $SetupExe) {
+  Write-Host "==> Building install bundle (folder picker)"
+  $stage = Join-Path $Installer "stage"
+  if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+  New-Item -ItemType Directory -Force -Path $stage | Out-Null
+  Copy-Item -Force (Join-Path $Installer "Install-BranchMerger.ps1") $stage
+  Copy-Item -Force (Join-Path $Installer "Install Branch Merger.cmd") $stage
+  Copy-Item -Force $SetupExe $stage
+  $zip = Join-Path $Releases "BranchMerger-Installer.zip"
+  if (Test-Path $zip) { Remove-Item -Force $zip }
+  Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
+  Remove-Item -Recurse -Force $stage
+}
+
 Write-Host ""
 Write-Host "Release assets are in: $Releases" -ForegroundColor Green
+Write-Host "First-install with folder picker: BranchMerger-Installer.zip (extract, run 'Install Branch Merger.cmd')" -ForegroundColor Green
 
 # --- Optional: create + upload the GitHub release -----------------------------
 if ($Upload) {

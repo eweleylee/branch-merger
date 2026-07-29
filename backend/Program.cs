@@ -4,8 +4,12 @@ using Velopack;
 
 // MUST run first. Handles Velopack install/update/uninstall hooks (special CLI
 // args) and exits early for those; a harmless no-op under `dotnet run` / portable
-// builds. Everything else only runs for a normal launch.
-VelopackApp.Build().Run();
+// builds. Everything else only runs for a normal launch. On uninstall, offer to
+// remove the user's data (kept by default).
+var velopackApp = VelopackApp.Build();
+if (OperatingSystem.IsWindows())
+    velopackApp = velopackApp.OnBeforeUninstallFastCallback(_ => UninstallHook.OnBeforeUninstall());
+velopackApp.Run();
 
 var builder = WebApplication.CreateBuilder(args);
 
