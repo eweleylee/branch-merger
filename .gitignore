@@ -6,6 +6,8 @@ output/
 # Velopack packaging artifacts (produced by pack.ps1)
 publish/
 releases/
+installer/stage/
+installer/*.exe
 
 # Frontend build
 node_modules/

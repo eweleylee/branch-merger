@@ -49,8 +49,10 @@ Dependencies: **Cronos** (cron parsing) and **Velopack** (installer + in-app
 auto-update). In production the API also **serves the built Vue app** as static files
 (single-server mode) on `http://localhost:5080`.
 
-**Program.cs** — `VelopackApp.Build().Run()` **as the very first line** (handles
-install/update/uninstall hooks; a no-op under `dotnet run`), then DI registration, CORS
+**Program.cs** — `VelopackApp.Build()…Run()` **as the very first line** (handles
+install/update/uninstall hooks; a no-op under `dotnet run`). On Windows it registers
+`OnBeforeUninstallFastCallback` → `UninstallHook.OnBeforeUninstall` (offers to delete
+`%APPDATA%\BranchMerger` on uninstall; kept by default). Then DI registration, CORS
 (dev), static file serving + SPA fallback, applies the run-on-startup preference
 (`WindowsStartup.Apply`), and auto-opens the browser on start when not in Development —
 **unless** launched with `--startup` (the login autostart passes it so boot is quiet).
@@ -150,6 +152,16 @@ variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted
 
 Vite dev-proxies `/api` → `localhost:5080`. In production there's no proxy (same origin).
 
+### Installer (`installer/`)
+A tiny **first-install folder picker**: `Install-BranchMerger.ps1` (a WinForms dialog via
+Windows' built-in .NET — recommended path pre-filled, Browse, Install) launched by
+`Install Branch Merger.cmd` (`-STA -ExecutionPolicy Bypass`). On Install it runs Velopack's
+`Setup.exe --installto <chosen>`. No bundled runtime, so `pack.ps1` zips just these two
+scripts + `Setup.exe` into **`BranchMerger-Installer.zip`** (~48 MB). Updates afterward are
+in-app (Velopack) and always apply in the chosen location. Uninstall is the native Velopack
+one (Windows Apps & features / `Update.exe --uninstall`) + the keep/remove-data prompt from
+`UninstallHook`.
+
 ### Demo (separate project, shipped as `branch-merger-demo/`)
 The **same Vue frontend** wired to an in-memory mock backend
 (`src/mock/mockBackend.js`) — no C#, no git, in-browser scheduler. Runs with
@@ -187,10 +199,12 @@ dotnet tool install -g vpk         # one time
 `pack.ps1` reads `<Version>` from the csproj (single source of truth — bump it per
 release), builds the frontend, publishes the backend **self-contained win-x64**
 (NOT single-file — Velopack repackages), copies the UI into `wwwroot/`, then runs
-`vpk pack` → `releases/` with `Setup.exe` + `*-full.nupkg` + `releases.win.json`.
-Velopack installs **per-user** to `%LocalAppData%\BranchMerger` (no admin), so the
-in-app **"Update now"** button downloads + applies + restarts without a prompt. See
-"Release / update flow" below.
+`vpk pack` → `releases/` with `Setup.exe` + `*-full.nupkg` + `releases.win.json`, and
+finally zips the folder-picker installer into `BranchMerger-Installer.zip`.
+Velopack installs **per-user** to `%LocalAppData%\BranchMerger` by default (no admin);
+`Setup.exe --installto <dir>` (used by the folder-picker) installs elsewhere and updates
+track that location. The in-app **"Update now"** button downloads + applies + restarts
+without a prompt. See "Release / update flow" below.
 
 Config: **everything is edited in the ⚙️ Settings screen at runtime** (persisted to
 `settings.json`); `appsettings.json` only seeds first-run defaults.

@@ -123,6 +123,23 @@ Override with `DataDirectory` in `appsettings.json` if you want a custom path. T
 prints the resolved location on startup. (Older builds that stored data next to the
 executable are migrated automatically on first run.)
 
+## Installing & uninstalling (Windows)
+Two ways to install from a GitHub release:
+- **`BranchMerger-Installer.zip`** — extract and run **`Install Branch Merger.cmd`**. It shows
+  a folder picker pre-filled with the recommended location (`%LocalAppData%\BranchMerger`);
+  keep it or choose another, then it installs there.
+- **`BranchMerger-win-Setup.exe`** — installs silently to the default location. For a custom
+  path from the command line: `BranchMerger-win-Setup.exe --installto "D:\Apps\BranchMerger"`.
+
+The app runs in the background (no console) and starts on Windows login (toggle in Settings).
+
+**Uninstall** from Windows **Settings → Apps → Branch Merger → Uninstall**. It asks whether to
+also remove your settings/schedules/notifications:
+- **No (keep)** — your data in `%APPDATA%\BranchMerger` is left in place. Because it lives
+  outside the install folder, a later reinstall — **even to a different location** — picks it
+  up automatically. Nothing to move.
+- **Yes (remove)** — deletes `%APPDATA%\BranchMerger` as well.
+
 ## Checking for updates (GitHub Releases)
 The app can tell you when a newer version is published, via GitHub Releases. Set your repo
 in `appsettings.json`:
