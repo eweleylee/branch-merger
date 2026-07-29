@@ -280,10 +280,16 @@ public class GitService : IGitService
             var tgtRef = $"{remote}/{tgtShort}";
 
             if ((await Step($"fetch {remote} --prune")).ExitCode != 0)
+            {
+                _log.LogError("Merge {Source} -> {Target}: fetch from {Remote} failed", source, target, remote);
                 return Fail("Fetch failed.", log);
+            }
 
             if ((await Step($"checkout -B {tgtShort} {tgtRef}")).ExitCode != 0)
+            {
+                _log.LogError("Merge {Source} -> {Target}: could not check out target '{Target2}'", source, target, tgtShort);
                 return Fail($"Could not check out target branch '{tgtShort}'.", log);
+            }
 
             var merge = await Step($"merge --no-edit {srcRef}");
             if (merge.ExitCode != 0)
@@ -298,6 +304,12 @@ public class GitService : IGitService
                 await Step("merge --abort");
                 await RestAndCleanup(tgtShort);
 
+                if (files.Count > 0)
+                    _log.LogError("Merge conflict merging {Source} into {Target} — {Count} file(s): {Files}. Aborted, nothing pushed.",
+                        source, target, files.Count, string.Join(", ", files));
+                else
+                    _log.LogError("Merge {Source} -> {Target} failed (no conflicts reported). Aborted, nothing pushed.", source, target);
+
                 var result = Fail(
                     files.Count > 0
                         ? $"Merge conflict in {files.Count} file(s). The merge was aborted, nothing was pushed."
@@ -311,7 +323,10 @@ public class GitService : IGitService
             if (push)
             {
                 if ((await Step($"push {remote} {tgtShort}")).ExitCode != 0)
+                {
+                    _log.LogError("Merge {Source} -> {Target}: merged locally but push to {Remote} failed", source, target, remote);
                     return Fail("Merge succeeded locally but push to remote failed.", log);
+                }
             }
 
             await RestAndCleanup(tgtShort);

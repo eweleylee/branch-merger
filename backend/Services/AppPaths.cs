@@ -14,18 +14,30 @@ namespace BranchMerger.Api.Services;
 public class AppPaths
 {
     public string DataDirectory { get; }
+    public string LogDirectory { get; }
     public string SettingsFile { get; }
     public string SchedulesFile { get; }
     public string NotificationsFile { get; }
 
-    public AppPaths(IConfiguration config, ILogger<AppPaths> log)
+    /// <summary>
+    /// Resolves the per-user data directory. Static so logging (configured before the DI
+    /// container is built) can find it too.
+    /// </summary>
+    public static string ResolveDataDirectory(IConfiguration config)
     {
         var configured = config["DataDirectory"];
-        DataDirectory = string.IsNullOrWhiteSpace(configured)
+        return string.IsNullOrWhiteSpace(configured)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BranchMerger")
             : configured;
+    }
 
+    public AppPaths(IConfiguration config, ILogger<AppPaths> log)
+    {
+        DataDirectory = ResolveDataDirectory(config);
         Directory.CreateDirectory(DataDirectory);
+
+        LogDirectory = Path.Combine(DataDirectory, "logs");
+        Directory.CreateDirectory(LogDirectory);
 
         SettingsFile = Resolve(config["SettingsFilePath"] ?? "settings.json");
         SchedulesFile = Resolve(config["SchedulesFilePath"] ?? "schedules.json");

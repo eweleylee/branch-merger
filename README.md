@@ -113,6 +113,17 @@ machine (matching the runtime, or self-contained). Its `settings.json`,
 `schedules.json` and `notifications.json` are created there at runtime.
 
 
+## Logs
+Errors — including **merge conflicts and failed scheduled runs** — are written to daily log
+files so you can look back even though the app runs windowless:
+- `%APPDATA%\BranchMerger\logs\log-YYYY-MM-DD.txt` (one file per day, local time).
+- Only errors are logged by default (`FileLog.MinimumLevel` = `Error`); merge conflicts and
+  failed runs are recorded at error level. Set it to `Warning`/`Information` for more detail.
+- Files older than **30 days** are removed automatically in the background
+  (`FileLog.RetentionDays`). Set `FileLog.Enabled` to `false` to turn logging off.
+- View them in-app: the **📄 button** in the header opens a log viewer — pick a day and
+  read the entries newest-first, no need to open the files by hand.
+
 ## Where your data lives (survives rebuilds)
 Settings, schedules, and notifications are stored in a stable **per-user data directory**,
 separate from the program files — so rebuilding or replacing the app never wipes them:
