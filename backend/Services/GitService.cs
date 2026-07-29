@@ -8,7 +8,8 @@ public interface IGitService
 {
     Task<IReadOnlyList<BranchInfo>> GetBranchesAsync(CancellationToken ct = default);
     Task FetchAsync(CancellationToken ct = default);
-    Task<MergeResult> MergeAsync(string source, string target, bool push, CancellationToken ct = default);
+    Task<MergeResult> MergeAsync(string source, string target, bool push,
+        Func<string, Task>? onStep = null, CancellationToken ct = default);
     Task<RepoStatus> GetRepoStatusAsync(CancellationToken ct = default);
     Task<RepoStatus> EnsureRepositoryAsync(CancellationToken ct = default);
 
@@ -228,7 +229,8 @@ public class GitService : IGitService
         finally { _gate.Release(); }
     }
 
-    public async Task<MergeResult> MergeAsync(string source, string target, bool push, CancellationToken ct = default)
+    public async Task<MergeResult> MergeAsync(string source, string target, bool push,
+        Func<string, Task>? onStep = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target))
             return new MergeResult { Success = false, Message = "Source and target branches are required." };
@@ -245,9 +247,16 @@ public class GitService : IGitService
 
             async Task<GitRun> Step(string args)
             {
-                log.AppendLine($"$ git {args}");
+                var head = $"$ git {args}";
+                log.AppendLine(head);
+                if (onStep != null) await onStep(head);          // live progress
+
                 var res = await RunAsync(args, ct);
-                if (!string.IsNullOrWhiteSpace(res.Combined)) log.AppendLine(res.Combined);
+                if (!string.IsNullOrWhiteSpace(res.Combined))
+                {
+                    log.AppendLine(res.Combined);
+                    if (onStep != null) await onStep(res.Combined);
+                }
                 log.AppendLine();
                 return res;
             }

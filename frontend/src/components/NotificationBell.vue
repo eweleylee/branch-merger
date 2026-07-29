@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { api } from '../api.js'
+import { busy } from '../busy.js'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -42,7 +43,7 @@ function fmt(dt) {
 
 <template>
   <div class="bell-wrap">
-    <button class="bell" @click="toggleOpen" :aria-label="`${unread} unread notifications`">
+    <button class="bell" :disabled="busy" @click="toggleOpen" :aria-label="`${unread} unread notifications`">
       🔔
       <span v-if="unread > 0" class="badge">{{ unread > 99 ? '99+' : unread }}</span>
     </button>

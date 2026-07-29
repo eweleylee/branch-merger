@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { api } from '../api.js'
+import { busy } from '../busy.js'
 
 const props = defineProps({
   schedules: { type: Array, default: () => [] }
@@ -103,8 +104,8 @@ function statusClass(st) { return !st ? '' : (st.startsWith('Success') ? 'ok' : 
           v-for="(s, i) in group.items"
           :key="s.id"
           class="row"
-          :class="{ off: !s.enabled, orderable: group.items.length > 1 }"
-          :draggable="group.items.length > 1"
+          :class="{ off: !s.enabled, orderable: group.items.length > 1 && !busy }"
+          :draggable="group.items.length > 1 && !busy"
           @dragstart="onDragStart(group.key, i)"
           @dragover.prevent
           @drop="onDrop(group.key, i)">
@@ -112,25 +113,27 @@ function statusClass(st) { return !st ? '' : (st.startsWith('Success') ? 'ok' : 
           <span class="grip" v-if="group.items.length > 1" title="Drag to reorder">⠿</span>
           <span class="seq" v-if="group.items.length > 1">{{ i + 1 }}</span>
 
-          <span class="branches">
-            <span class="src">{{ s.sourceBranch }}</span>
-            <span class="into">→</span>
-            <span class="tgt">{{ s.targetBranch }}</span>
-            <span v-if="s.push" class="pill">push</span>
-          </span>
+          <div class="content">
+            <span class="branches">
+              <span class="src">{{ s.sourceBranch }}</span>
+              <span class="into">→</span>
+              <span class="tgt">{{ s.targetBranch }}</span>
+              <span v-if="s.push" class="pill">push</span>
+            </span>
 
-          <span class="status" :class="statusClass(s.lastStatus)">
-            {{ s.lastStatus || 'not run yet' }}
-          </span>
+            <span class="status" :class="statusClass(s.lastStatus)">
+              {{ s.lastStatus || 'not run yet' }}
+            </span>
 
-          <span class="actions">
-            <button class="mini" :disabled="togglingId===s.id" @click="toggle(s.id)">
-              <span v-if="togglingId===s.id" class="spinner"></span>{{ s.enabled ? 'Pause' : 'Resume' }}
-            </button>
-            <button class="mini danger" :disabled="deletingId===s.id" @click="remove(s.id)">
-              <span v-if="deletingId===s.id" class="spinner"></span>Delete
-            </button>
-          </span>
+            <span class="actions">
+              <button class="mini" :disabled="busy || togglingId===s.id" @click="toggle(s.id)">
+                <span v-if="togglingId===s.id" class="spinner"></span>{{ s.enabled ? 'Pause' : 'Resume' }}
+              </button>
+              <button class="mini danger" :disabled="busy || deletingId===s.id" @click="remove(s.id)">
+                <span v-if="deletingId===s.id" class="spinner"></span>Delete
+              </button>
+            </span>
+          </div>
         </div>
       </div>
       </div>
@@ -144,8 +147,7 @@ h2 { margin: 0 0 12px; font-size: 18px; }
 .empty { color: var(--muted); font-size: 14px; }
 .hint { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
 
-.sched-scroll { overflow-x: auto; }
-.group { margin-bottom: 16px; min-width: 440px; }
+.group { margin-bottom: 16px; }
 .group-head {
   display: flex; align-items: center; gap: 10px;
   font-size: 12px; color: var(--muted); padding: 6px 4px; border-bottom: 1px solid var(--border);
@@ -154,28 +156,31 @@ h2 { margin: 0 0 12px; font-size: 18px; }
 .tag.muted { opacity: .7; }
 
 .row {
-  display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 10px;
-  padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 13px;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 8px; border-bottom: 1px solid var(--border); font-size: 13px;
 }
 .row.orderable { cursor: grab; }
 .row.orderable:active { cursor: grabbing; }
 .row.off { opacity: .55; }
-.grip { color: var(--muted); font-size: 14px; letter-spacing: -2px; }
+.grip { color: var(--muted); font-size: 14px; letter-spacing: -2px; padding-top: 2px; flex: none; }
 .seq {
   width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--panel-2); color: var(--muted); font-size: 11px;
+  background: var(--panel-2); color: var(--muted); font-size: 11px; flex: none;
 }
+
+/* Stack: branch line, then status/conflict line, then the action buttons. */
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .branches { min-width: 0; }
 .src { color: var(--accent); }
 .tgt { color: var(--accent-2); }
 .into { color: var(--muted); margin: 0 6px; }
 .pill { margin-left: 8px; font-size: 11px; background: var(--panel-2); padding: 1px 7px; border-radius: 6px; color: var(--muted); }
 
-.status { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.status { font-size: 12px; color: var(--muted); white-space: normal; word-break: break-word; }
 .status.ok { color: var(--accent-2); }
 .status.err { color: var(--danger); }
 
-.actions { display: flex; gap: 8px; white-space: nowrap; }
+.actions { display: flex; gap: 8px; margin-top: 2px; }
 .mini { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
 .mini.danger { border-color: var(--danger); color: var(--danger); }
 </style>

@@ -1,6 +1,17 @@
 // Thin wrapper around the backend API. All calls go through /api which Vite
 // proxies to the C# server during development.
 
+// Parse one SSE record ("event:"/"data:" lines) into { event, data }.
+function parseSSE(raw) {
+  let event = 'message'
+  const dataLines = []
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''))
+  }
+  return { event, data: dataLines.join('\n') }
+}
+
 async function req(url, options = {}) {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -25,6 +36,36 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
+
+  // Streaming merge: calls onStep(line) for each git step as it runs, then
+  // onResult(mergeResult) at the end. Reads the SSE response body incrementally.
+  mergeStream: async (payload, onStep, onResult) => {
+    const res = await fetch('/api/merge/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok || !res.body) throw new Error(`Merge failed (${res.status})`)
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let gotResult = false
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let sep
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const evt = parseSSE(buf.slice(0, sep))
+        buf = buf.slice(sep + 2)
+        if (evt.event === 'step') onStep(evt.data)
+        else if (evt.event === 'result') { gotResult = true; onResult(JSON.parse(evt.data)) }
+      }
+    }
+    if (!gotResult) throw new Error('The merge ended without a result.')
+  },
 
   getSchedules: () => req('/api/schedules'),
   createSchedule: (payload) => req('/api/schedules', {
