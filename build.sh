@@ -13,7 +13,7 @@ RID="${1:-}"
 echo "==> Cleaning $OUT"
 rm -rf "$OUT"
 
-echo "==> Building frontend (Vite)"
+echo "==> Building frontend (Angular)"
 cd "$ROOT/frontend"
 npm install
 npm run build

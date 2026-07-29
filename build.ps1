@@ -11,7 +11,7 @@ $Out  = Join-Path $Root "output"
 Write-Host "==> Cleaning $Out"
 if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
 
-Write-Host "==> Building frontend (Vite)"
+Write-Host "==> Building frontend (Angular)"
 Push-Location (Join-Path $Root "frontend")
 npm install
 npm run build

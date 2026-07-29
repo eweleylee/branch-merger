@@ -40,7 +40,7 @@ if (-not (Get-Command vpk -ErrorAction SilentlyContinue)) {
 }
 
 # --- Frontend build -----------------------------------------------------------
-Write-Host "==> Building frontend (Vite)"
+Write-Host "==> Building frontend (Angular)"
 Push-Location $Frontend
 npm install
 npm run build
@@ -76,28 +76,35 @@ vpk pack `
   --packTitle   "Branch Merger" `
   --outputDir   $Releases
 
-# --- Folder-picker install bundle (tiny launcher + Setup, zipped → one download) --
-# Uses Windows' built-in PowerShell/.NET for the folder dialog, so there's no runtime
-# to bundle — the zip is basically just Setup.exe plus a ~2 KB script.
+# --- First-install wizard (Inno Setup wrapping the silent Velopack Setup) ----------
+# One cohesive wizard (welcome + folder page + progress); Velopack runs hidden inside it,
+# so the user never sees a second window. Auto-update afterwards is unchanged.
 $Installer = Join-Path $Root "installer"
 $SetupExe  = Join-Path $Releases "BranchMerger-win-Setup.exe"
-if (Test-Path $SetupExe) {
-  Write-Host "==> Building install bundle (folder picker)"
-  $stage = Join-Path $Installer "stage"
-  if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-  New-Item -ItemType Directory -Force -Path $stage | Out-Null
-  Copy-Item -Force (Join-Path $Installer "Install-BranchMerger.ps1") $stage
-  Copy-Item -Force (Join-Path $Installer "Install Branch Merger.cmd") $stage
-  Copy-Item -Force $SetupExe $stage
-  $zip = Join-Path $Releases "BranchMerger-Installer.zip"
-  if (Test-Path $zip) { Remove-Item -Force $zip }
-  Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
-  Remove-Item -Recurse -Force $stage
+$Iscc = @(
+  "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+  "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+  "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if ((Test-Path $SetupExe) -and $Iscc) {
+  Write-Host "==> Building install wizard (Inno Setup)"
+  Copy-Item -Force $SetupExe (Join-Path $Installer "BranchMerger-win-Setup.exe")
+  try {
+    & $Iscc "/DMyVersion=$Version" "/O$Releases" (Join-Path $Installer "branch-merger.iss") | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "ISCC failed (exit $LASTEXITCODE)" }
+  }
+  finally {
+    Remove-Item -Force (Join-Path $Installer "BranchMerger-win-Setup.exe") -ErrorAction SilentlyContinue
+  }
+}
+elseif (Test-Path $SetupExe) {
+  Write-Host "    (Inno Setup not found - skipping the wizard. Install it: winget install JRSoftware.InnoSetup)" -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "Release assets are in: $Releases" -ForegroundColor Green
-Write-Host "First-install with folder picker: BranchMerger-Installer.zip (extract, run 'Install Branch Merger.cmd')" -ForegroundColor Green
+Write-Host "First-install wizard: BranchMerger-Setup.exe (folder picker; Velopack runs silently inside)" -ForegroundColor Green
 
 # --- Optional: create + upload the GitHub release -----------------------------
 if ($Upload) {
