@@ -1,7 +1,7 @@
 # Branch Merger — project guide
 
 A small full-stack developer tool for merging one Git branch into another —
-instantly or on a schedule. **C# / ASP.NET Core (.NET 8) backend + Vue 3 (Vite)
+instantly or on a schedule. **C# / ASP.NET Core (.NET 8) backend + Angular 18 (standalone)
 frontend.** Single-instance, self-hosted, no database.
 
 This file orients an AI assistant or new developer. For end-user setup see `README.md`.
@@ -46,7 +46,7 @@ the merge lived only in that local branch, so deleting it discards the un-pushed
 
 ### Backend (`backend/`, .NET 8, ASP.NET Core Web API)
 Dependencies: **Cronos** (cron parsing) and **Velopack** (installer + in-app
-auto-update). In production the API also **serves the built Vue app** as static files
+auto-update). In production the API also **serves the built Angular app** as static files
 (single-server mode) on `http://localhost:5080`.
 
 **Program.cs** — `VelopackApp.Build()…Run()` **as the very first line** (handles
@@ -129,41 +129,39 @@ are Windows-only and only act for an installed (Velopack) build.
 (`Type` = `Once|Cron`, `Order` is the same-time tiebreaker), `CreateScheduleDto`,
 `Notification` (`Level` = `Info|Warning|Error`).
 
-### Frontend (`frontend/`, Vue 3 + Vite)
-Deps: `vue`, `cronstrue`; dev: `vite`, `@vitejs/plugin-vue`. Dark theme via CSS
-variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted`,
-`--accent`, `--accent2`, `--danger`, `--warn`).
+### Frontend (`frontend/`, Angular 18 — standalone components)
+Deps: `@angular/*` 18, `cronstrue`. Built with the Angular CLI (esbuild). Dark theme via
+CSS variables in `src/styles.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted`,
+`--accent`, `--accent-2`, `--danger`, `--warn`). All components are **standalone** (no
+NgModules); each is one `*.component.ts` with an inline template + styles (styles are
+scoped via Angular's default emulated encapsulation, like Vue's `scoped`).
 
-- `api.js` — thin `fetch` wrapper; on non-2xx it throws an `Error` with `.data` set to
-  the response body (so callers can read `err.data.conflictedFiles` etc.).
-- `cron.js` — `describeCron(expr)` = **cronstrue with a hand-rolled fallback** (auto, no
-  UI toggle); plus `nextRun`/`formatNext` (client-side minute scan; numeric fields only).
-- `App.vue` — layout, polls every 10s (`getBranches`/`getSchedules`/`getNotifications`),
-  banners (repo-not-ready; **update-available** with an **"Update now"** button when
-  `canSelfUpdate`, else a Download link). Clicking Update now opens a **blocking modal
-  dialog** (`.update-overlay`) that shows live phase text (`updateStatus`, read from the
-  backend's "Update" notifications: downloading → waiting for a running merge → restarting),
-  then `watchForRestart()` polls until the server drops and returns and reloads. Header
-  (bell + 📄 logs + gear).
-- `components/`
-  - `MergePanel.vue` — source/target via `BranchSelect`, push toggle, mode segments
-    (now / once / cron), live cron echo + next-run, merge/schedule actions, result with
-    conflicted-file list. "Merge now" streams git steps into a **live process box**
-    (`api.mergeStream` → SSE) that clears before each run and is never persisted.
-  - A shared `busy` ref (`busy.js`) is set while a merge runs; every component imports it and
-    **disables all action buttons/inputs** (merge, refresh, mode segments, branch selects,
-    schedule pause/delete/drag, gear, bell) so nothing can be triggered twice mid-merge.
-  - `BranchSelect.vue` — **searchable, accessible combobox** (type to filter on short name,
-    arrow/Enter/Esc, click-outside, ARIA); **strict** (only real branches); shows names only.
-  - `ScheduleList.vue` — rows **grouped by run time**; **drag-to-reorder within a same-time
-    group** (order only matters for same-time schedules); horizontally scrollable on mobile.
-  - `NotificationBell.vue` — in-app feed dropdown (✕ + backdrop close, responsive).
-  - `LogViewer.vue` — modal (📄 header button) to browse the daily log files; date selector
-    (newest first), entries **newest-first** with level badges, capped to the 3000 most recent.
-  - `SettingsPanel.vue` — **Repository section only** (path, URL, remote, fetch interval,
-    Check status / Clone). Webhook/email sections were removed.
+- `api.service.ts` — injectable `fetch` wrapper; on non-2xx it throws `ApiError` with `.data`
+  set to the response body. Includes `mergeStream()` (SSE via `fetch` + `ReadableStream`).
+- `cron.ts` — `describeCron(expr)` = **cronstrue with a hand-rolled fallback**; plus
+  `nextRun`/`formatNext` (client-side minute scan in local time; numeric fields only).
+- `busy.ts` — a global `signal(false)`; every component reads `busy()` and **disables all
+  action buttons/inputs** while a merge runs so nothing can be triggered twice mid-merge.
+- `app.component.ts` — shell/layout, polls every 10s, banners (repo-not-ready;
+  **update-available** with **"Update now"** when `canSelfUpdate`, else Download). Update now
+  opens a **blocking modal** showing live phase text (`updateStatus`, from the backend's
+  "Update" notifications), then `watchForRestart()` polls until the server returns and reloads.
+  Header (bell + 📄 logs + gear). Hourly `getUpdate()` re-check.
+- `merge-panel.component.ts` — source/target via `app-branch-select`, push toggle, mode
+  segments (now / once / cron), live cron echo + next-run, merge/schedule actions. "Merge now"
+  streams git steps into a **live process box** (`ApiService.mergeStream` → SSE), cleared each run.
+- `branch-select.component.ts` — **searchable, accessible combobox** (`[(value)]`; type to
+  filter, arrow/Enter/Esc, click-outside via `@HostListener`, ARIA); shows short names only.
+- `schedule-list.component.ts` — rows **grouped by run time**; **drag-to-reorder within a
+  same-time group** (HTML5 drag events); stacked branch/status/actions layout.
+- `notification-bell.component.ts` — in-app feed dropdown (✕ + backdrop close, responsive).
+- `log-viewer.component.ts` — modal (📄 header button); date selector (newest first),
+  entries **newest-first** with level badges, capped to the 3000 most recent.
+- `settings-panel.component.ts` — Repository + Startup sections (path, URL, remote, fetch
+  interval, default branch, run-on-startup; Check status / Clone).
 
-Vite dev-proxies `/api` → `localhost:5080`. In production there's no proxy (same origin).
+Dev: `proxy.conf.json` proxies `/api` → `localhost:5080` (dev server on `:5173`). Build
+output is `frontend/dist/browser/` (copied into `wwwroot/` for production; no proxy — same origin).
 
 ### Installer (`installer/`)
 A tiny **first-install folder picker**: `Install-BranchMerger.ps1` (a WinForms dialog via
@@ -175,11 +173,10 @@ in-app (Velopack) and always apply in the chosen location. Uninstall is the nati
 one (Windows Apps & features / `Update.exe --uninstall`) + the keep/remove-data prompt from
 `UninstallHook`.
 
-### Demo (separate project, shipped as `branch-merger-demo/`)
-The **same Vue frontend** wired to an in-memory mock backend
-(`src/mock/mockBackend.js`) — no C#, no git, in-browser scheduler. Runs with
-`npm install && npm run dev`. Only `api.js` differs (delegates to the mock); every
-component is identical to production. Keep it in sync when components change.
+### Demo (separate project, not in this repo)
+Historically a mock-backed copy of the frontend (no C#, no git) was shipped as
+`branch-merger-demo/`. It is **not present in this repo** and predates the Angular
+rewrite; if revived it would wire the Angular UI to a mock `ApiService`.
 
 ---
 

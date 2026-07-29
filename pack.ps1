@@ -58,7 +58,7 @@ Write-Host "==> Copying frontend build into wwwroot"
 $www = Join-Path $Publish "wwwroot"
 if (Test-Path $www) { Remove-Item -Recurse -Force $www }
 New-Item -ItemType Directory -Force -Path $www | Out-Null
-Copy-Item -Recurse -Force (Join-Path $Frontend "dist\*") $www
+Copy-Item -Recurse -Force (Join-Path $Frontend "dist\browser\*") $www
 
 # --- Start fresh: wipe assets from previous versions -------------------------
 # So 'releases' only ever holds the current version's files (full packages, no

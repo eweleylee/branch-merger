@@ -33,7 +33,7 @@ Write-Host "==> Copying frontend build into wwwroot"
 $www = Join-Path $Out "wwwroot"
 if (Test-Path $www) { Remove-Item -Recurse -Force $www }
 New-Item -ItemType Directory -Force -Path $www | Out-Null
-Copy-Item -Recurse -Force (Join-Path $Root "frontend\dist\*") $www
+Copy-Item -Recurse -Force (Join-Path $Root "frontend\dist\browser\*") $www
 
 Write-Host "==> Writing launcher"
 $bat = @"
