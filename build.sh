@@ -32,7 +32,7 @@ fi
 echo "==> Copying frontend build into wwwroot"
 rm -rf "$OUT/wwwroot"
 mkdir -p "$OUT/wwwroot"
-cp -R "$ROOT/frontend/dist/." "$OUT/wwwroot/"
+cp -R "$ROOT/frontend/dist/browser/." "$OUT/wwwroot/"
 
 echo "==> Writing launchers"
 cat > "$OUT/Start.command" << 'LAUNCH'

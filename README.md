@@ -1,7 +1,7 @@
 # 🌿 Branch Merger
 
 A small full-stack tool for merging one Git branch into another — instantly or on a
-schedule. C# / ASP.NET Core backend, Vue 3 (Vite) frontend.
+schedule. C# / ASP.NET Core backend, Angular 18 (standalone) frontend.
 
 ## What it does
 - Pick a **source** branch (merge FROM) and a **target** branch (merge INTO), e.g. `master` → `feature/x`.
@@ -72,11 +72,12 @@ npm run dev
 # UI on http://localhost:5173
 ```
 
-Open http://localhost:5173. The Vite dev server proxies `/api` to the backend.
+Open http://localhost:5173. The Angular dev server proxies `/api` to the backend
+(`frontend/proxy.conf.json`).
 
 ## Production build (one folder, click to start)
 
-The build script compiles the Vue app, publishes the API, and drops everything into
+The build script compiles the Angular app, publishes the API, and drops everything into
 `./output/`. In production the **API serves the built UI itself**, so it's a single
 process on a single URL — no separate frontend server, no CORS.
 
