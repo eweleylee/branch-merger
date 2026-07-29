@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { api } from '../api.js'
+import { busy } from '../busy.js'
 import { describeCron, nextRun, formatNext } from '../cron.js'
 import BranchSelect from './BranchSelect.vue'
 
@@ -24,8 +25,9 @@ const cron = ref('0 2 * * *')   // default: every day at 02:00 local time
 const cronInfo = computed(() => describeCron(cron.value))
 const cronNext = computed(() => cronInfo.value.ok ? formatNext(nextRun(cron.value)) : '')
 
-const busy = ref(false)
-const result = ref(null)        // { ok, message, log }
+const result = ref(null)        // { ok, message, conflictedFiles }
+const processLines = ref([])    // live git steps for the current merge (ephemeral, cleared each run)
+const processBox = ref(null)
 
 // Show branches with commit info, remote branches first (they are the freshest).
 const branchOptions = computed(() =>
@@ -36,22 +38,28 @@ const canSubmit = computed(() =>
   source.value && target.value && source.value !== target.value && !busy.value
 )
 
+function pushLine(line) {
+  processLines.value.push(line)
+  // Keep the newest step in view.
+  nextTick(() => { const el = processBox.value; if (el) el.scrollTop = el.scrollHeight })
+}
+
 async function mergeNow() {
-  busy.value = true; result.value = null
+  busy.value = true
+  result.value = null
+  processLines.value = []          // clear the process box before each new merge
   try {
-    const r = await api.merge({
-      sourceBranch: source.value,
-      targetBranch: target.value,
-      push: push.value
-    })
-    result.value = { ok: true, message: r.message, log: r.log }
+    await api.mergeStream(
+      { sourceBranch: source.value, targetBranch: target.value, push: push.value },
+      line => pushLine(line),
+      res => {
+        result.value = res.success
+          ? { ok: true, message: res.message }
+          : { ok: false, message: res.message, conflictedFiles: res.conflictedFiles || [] }
+      }
+    )
   } catch (e) {
-    result.value = {
-      ok: false,
-      message: e.message,
-      log: e.data?.log,
-      conflictedFiles: e.data?.conflictedFiles || []
-    }
+    result.value = { ok: false, message: e.message }
   } finally {
     busy.value = false
   }
@@ -95,7 +103,7 @@ function submit() {
       <h2>Merge branches</h2>
       <div class="updated">
         <span v-if="branchesUpdatedAt">branches updated {{ new Date(branchesUpdatedAt).toLocaleTimeString() }}</span>
-        <button class="btn-ghost small" :disabled="refreshing" @click="emit('refresh')">
+        <button class="btn-ghost small" :disabled="refreshing || busy" @click="emit('refresh')">
           <span v-if="refreshing" class="spinner"></span>{{ refreshing ? 'Refreshing…' : '↻ Refresh' }}
         </button>
       </div>
@@ -104,27 +112,27 @@ function submit() {
     <div class="merge-row">
       <div class="field">
         <label>Merge from (source)</label>
-        <BranchSelect v-model="source" :branches="branchOptions" placeholder="Search branches…" />
+        <BranchSelect v-model="source" :branches="branchOptions" :disabled="busy" placeholder="Search branches…" />
       </div>
 
       <div class="arrow">→</div>
 
       <div class="field">
         <label>Merge into (target)</label>
-        <BranchSelect v-model="target" :branches="branchOptions" placeholder="Search branches…" />
+        <BranchSelect v-model="target" :branches="branchOptions" :disabled="busy" placeholder="Search branches…" />
       </div>
     </div>
 
     <label class="check">
-      <input type="checkbox" v-model="push" />
+      <input type="checkbox" v-model="push" :disabled="busy" />
       Push target to remote after a successful merge
     </label>
 
     <!-- Scheduling options -->
     <div class="modes">
-      <button :class="['seg', mode==='now'  && 'seg-on']" @click="mode='now'">Merge now</button>
-      <button :class="['seg', mode==='once' && 'seg-on']" @click="mode='once'">Schedule once</button>
-      <button :class="['seg', mode==='cron' && 'seg-on']" @click="mode='cron'">Recurring</button>
+      <button :class="['seg', mode==='now'  && 'seg-on']" :disabled="busy" @click="mode='now'">Merge now</button>
+      <button :class="['seg', mode==='once' && 'seg-on']" :disabled="busy" @click="mode='once'">Schedule once</button>
+      <button :class="['seg', mode==='cron' && 'seg-on']" :disabled="busy" @click="mode='cron'">Recurring</button>
     </div>
 
     <div v-if="mode==='once'" class="field">
@@ -160,12 +168,20 @@ function submit() {
       </button>
     </div>
 
+    <!-- Live merge process: shows each git step as it runs; cleared before each merge. -->
+    <div v-if="mode==='now' && (busy || processLines.length)" class="process">
+      <div class="process-head">
+        <span v-if="busy" class="spinner"></span>
+        <strong>{{ busy ? 'Merging…' : 'Merge process' }}</strong>
+      </div>
+      <pre ref="processBox">{{ processLines.join('\n') }}</pre>
+    </div>
+
     <div v-if="result" :class="['result', result.ok ? 'ok' : 'err']">
       <strong>{{ result.ok ? 'Success' : 'Problem' }}:</strong> {{ result.message }}
       <ul v-if="result.conflictedFiles && result.conflictedFiles.length" class="conflicts">
         <li v-for="f in result.conflictedFiles" :key="f"><code>{{ f }}</code></li>
       </ul>
-      <pre v-if="result.log">{{ result.log }}</pre>
     </div>
   </section>
 </template>
@@ -203,6 +219,14 @@ h2 { margin: 0; font-size: 18px; }
 
 .actions { margin-top: 18px; }
 .actions button { min-width: 160px; }
+
+.process { margin-top: 16px; }
+.process-head { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+.process pre {
+  margin: 0; white-space: pre-wrap; font-size: 12px; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; max-height: 260px; overflow: auto;
+}
 
 .result { margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
 .result.ok { background: rgba(63,178,127,.12); border: 1px solid var(--accent-2); }

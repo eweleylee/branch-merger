@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from './api.js'
+import { busy } from './busy.js'
 import MergePanel from './components/MergePanel.vue'
 import ScheduleList from './components/ScheduleList.vue'
 import NotificationBell from './components/NotificationBell.vue'
@@ -160,7 +161,7 @@ onUnmounted(() => { clearInterval(pollTimer); clearInterval(updateTimer) })
           :items="notifications"
           :unread="unread"
           @changed="loadNotifications" />
-        <button class="gear" @click="showSettings = true" aria-label="Settings">⚙️</button>
+        <button class="gear" :disabled="busy" @click="showSettings = true" aria-label="Settings">⚙️</button>
       </div>
     </header>
 
@@ -220,7 +221,7 @@ onUnmounted(() => { clearInterval(pollTimer); clearInterval(updateTimer) })
 </template>
 
 <style scoped>
-.wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px 60px; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 40px 32px 60px; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 h1 { margin: 0; font-size: 26px; letter-spacing: -.3px; }
 .sub { margin: 6px 0 0; color: var(--muted); }

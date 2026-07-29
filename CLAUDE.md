@@ -103,7 +103,8 @@ are Windows-only and only act for an installed (Velopack) build.
 
 **Controllers/** (`api/...`)
 - `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`.
-- `MergeController` — `POST /api/merge` (instant); notifies on conflict.
+- `MergeController` — `POST /api/merge` (instant); `POST /api/merge/stream` (SSE: streams
+  each git step live as `step` events, then a final `result` event); notifies on conflict.
 - `SchedulesController` — CRUD + `PUT /api/schedules/reorder` + `POST /{id}/toggle`.
 - `NotificationsController` — feed, read-all, clear, `POST /api/notifications/test`.
 - `SettingsController` — `GET/PUT /api/settings`, `GET /api/settings/repo-status`, `POST /api/settings/clone`.
@@ -134,7 +135,11 @@ variables in `style.css` (`--panel`, `--panel-2`, `--border`, `--text`, `--muted
 - `components/`
   - `MergePanel.vue` — source/target via `BranchSelect`, push toggle, mode segments
     (now / once / cron), live cron echo + next-run, merge/schedule actions, result with
-    conflicted-file list.
+    conflicted-file list. "Merge now" streams git steps into a **live process box**
+    (`api.mergeStream` → SSE) that clears before each run and is never persisted.
+  - A shared `busy` ref (`busy.js`) is set while a merge runs; every component imports it and
+    **disables all action buttons/inputs** (merge, refresh, mode segments, branch selects,
+    schedule pause/delete/drag, gear, bell) so nothing can be triggered twice mid-merge.
   - `BranchSelect.vue` — **searchable, accessible combobox** (type to filter on short name,
     arrow/Enter/Esc, click-outside, ARIA); **strict** (only real branches); shows names only.
   - `ScheduleList.vue` — rows **grouped by run time**; **drag-to-reorder within a same-time

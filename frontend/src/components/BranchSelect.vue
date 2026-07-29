@@ -4,7 +4,8 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 const props = defineProps({
   modelValue: { type: String, default: '' },     // the selected branch .name (e.g. "origin/feature/x")
   branches: { type: Array, default: () => [] },   // BranchInfo[]
-  placeholder: { type: String, default: 'Search branches…' }
+  placeholder: { type: String, default: 'Search branches…' },
+  disabled: { type: Boolean, default: false }
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -31,7 +32,7 @@ const displayLabel = computed(() => selected.value ? selected.value.shortName : 
 const shownValue = computed(() => open.value ? query.value : displayLabel.value)
 
 function openList() {
-  if (open.value) return
+  if (open.value || props.disabled) return
   open.value = true
   query.value = ''
   activeIndex.value = filtered.value.findIndex(b => b.name === props.modelValue)
@@ -83,7 +84,7 @@ watch(() => props.branches, (list) => {
 </script>
 
 <template>
-  <div class="branch-select" ref="root">
+  <div class="branch-select" ref="root" :class="{ disabled }">
     <div class="control" :class="{ open }">
       <input
         ref="inputEl"
@@ -95,6 +96,7 @@ watch(() => props.branches, (list) => {
         :aria-activedescendant="activeIndex >= 0 ? listId + '-' + activeIndex : undefined"
         :value="shownValue"
         :placeholder="selected ? selected.shortName : placeholder"
+        :disabled="disabled"
         @focus="openList"
         @click="openList"
         @input="onInput"
@@ -102,7 +104,7 @@ watch(() => props.branches, (list) => {
         @keydown.up.prevent="move(-1)"
         @keydown.enter.prevent="enter"
         @keydown.esc.prevent="close" />
-      <span class="chev" aria-hidden="true" @mousedown.prevent="open ? close() : (inputEl && inputEl.focus())">▾</span>
+      <span class="chev" aria-hidden="true" @mousedown.prevent="disabled ? null : (open ? close() : (inputEl && inputEl.focus()))">▾</span>
     </div>
 
     <ul v-if="open" class="list" :id="listId" role="listbox">
@@ -125,7 +127,10 @@ watch(() => props.branches, (list) => {
 
 <style scoped>
 .branch-select { position: relative; }
+.branch-select.disabled { opacity: .55; }
+.branch-select.disabled .chev { cursor: not-allowed; }
 .control { position: relative; }
+.control input:disabled { cursor: not-allowed; }
 .control input {
   width: 100%; padding: 9px 30px 9px 11px;
   color: var(--text); background: var(--panel); border: 1px solid var(--border);

@@ -67,7 +67,7 @@ public class SchedulerBackgroundService : BackgroundService
             _log.LogInformation("Running schedule {Id}: {Src} -> {Tgt}", s.Id, s.SourceBranch, s.TargetBranch);
 
             var git = _sp.GetRequiredService<IGitService>();
-            var result = await git.MergeAsync(s.SourceBranch, s.TargetBranch, s.Push, ct);
+            var result = await git.MergeAsync(s.SourceBranch, s.TargetBranch, s.Push, ct: ct);
 
             s.LastRunUtc = DateTime.UtcNow;
             s.LastStatus = result.Success ? "Success" : "Failed: " + result.Message;
