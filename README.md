@@ -7,7 +7,7 @@ schedule. C# / ASP.NET Core backend, Angular 18 (standalone) frontend.
 - Pick a **source** branch (merge FROM) and a **target** branch (merge INTO), e.g. `master` → `feature/x`.
 - **Merge now** with one click, or set up a schedule:
   - **Once** — run at a specific date/time.
-  - **Recurring** — a cron expression (UTC).
+  - **Recurring** — a cron expression, interpreted in the **server PC's local timezone**.
 - The backend **fetches branches continuously in the background** so the dropdowns always show the latest branches.
 - **Same-time ordering:** when several schedules fire at the same time they run one after another (never in parallel); drag rows in the schedule list to set which goes first. Ordering only matters within a shared time — different times are decided by the clock.
 - Schedules run **server-side**, so they fire even if the browser tab is closed (as long as the backend is running).
@@ -27,20 +27,27 @@ git fetch <remote> --prune
 git checkout -B <target> <remote>/<target>   # reset local target to match remote
 git merge --no-edit <remote>/<source>
 git push <remote> <target>                   # only if "push" is checked
+git checkout <default branch>                # rest on the default branch (e.g. master)
+git branch -D <target>                       # delete the local target branch
 ```
-If the merge hits conflicts it is **aborted automatically** and nothing is pushed.
+On conflict the merge is **aborted automatically** and nothing is pushed. Either way the
+clone is returned to the **default branch** (set in Settings; default `master`) and the local
+target branch is deleted — so the branch dropdowns list **remote branches only** (no
+duplicates), and the clone never rests on a feature branch. Conflicts and failures are also
+written to the log (see [Logs](#logs)).
 
 > ⚠️ Point the app at a **dedicated working clone**, not a repo you edit by hand.
 > The merge resets the local target branch to match the remote.
 
 ## Configuration — all in the app, no file editing
 
-Everything (repository path, repository URL, remote, fetch interval, and all
-notification settings) is edited from the **⚙️ Settings** screen in the UI and saved
-to `backend/settings.json` at runtime. You don't edit backend code or config to change them.
+Everything (repository path, repository URL, remote, fetch interval, default branch, and
+"run on Windows startup") is edited from the **⚙️ Settings** screen in the UI and saved
+to `settings.json` at runtime. You don't edit backend code or config to change them.
 
 - `appsettings.json` only **seeds** `settings.json` on first run; after that, `settings.json` is the source of truth.
-- `settings.json` holds secrets (e.g. SMTP password) and is gitignored. The API never sends the saved password back to the browser.
+- Notifications are **in-app only** — there are no email/webhook settings.
+- `settings.json` lives in the per-user data directory (see below), not the program folder.
 
 ### Point it at a repo (from the Settings screen)
 1. Set **Working clone path** to a dedicated folder this app owns.
@@ -175,25 +182,33 @@ Results are cached (~6h) to stay under GitHub's rate limit.
 ## API
 | Method | Route | Purpose |
 |--------|-------|---------|
-| GET | `/api/branches` | Cached branch list + last-updated time |
+| GET | `/api/branches` | Cached branch list (remote branches) + last-updated time |
 | POST | `/api/branches/refresh` | Force an immediate fetch |
 | POST | `/api/merge` | Merge now `{ sourceBranch, targetBranch, push }` |
+| POST | `/api/merge/stream` | Merge now, streaming each git step live (SSE) |
 | GET | `/api/schedules` | List schedules |
 | POST | `/api/schedules` | Create `{ sourceBranch, targetBranch, push, type, runAtUtc?, cronExpression? }` |
+| PUT | `/api/schedules/reorder` | Reorder same-time schedules |
 | POST | `/api/schedules/{id}/toggle` | Pause / resume |
 | DELETE | `/api/schedules/{id}` | Delete |
 | GET | `/api/notifications` | Alert feed + unread count |
 | POST | `/api/notifications/read-all` | Mark all read |
+| POST | `/api/notifications/{id}/read` | Mark one read |
 | POST | `/api/notifications/clear` | Clear feed |
 | POST | `/api/notifications/test` | Send a test alert |
-| GET | `/api/settings` | Current settings (password masked) |
+| GET | `/api/settings` | Current settings |
 | PUT | `/api/settings` | Save settings |
 | GET | `/api/settings/repo-status` | Is the working clone ready? |
 | POST | `/api/settings/clone` | Clone from the configured URL |
+| GET | `/api/update` | Update-check status (current vs latest) |
+| POST | `/api/update/check` | Force a fresh update check |
+| POST | `/api/update/apply` | Download + apply the update, then restart (Velopack installs only) |
+| GET | `/api/logs` | Daily log files, newest first |
+| GET | `/api/logs/{name}` | One day's entries, newest first |
 
-Schedules are persisted to `backend/schedules.json`.
+Schedules are persisted to `schedules.json` in the per-user data directory.
 
 ## Notes & next steps
-- Cron expressions use standard 5-field syntax in **UTC**.
-- Persistence is a JSON file; swap `ScheduleStore` for EF Core + a database for production.
+- Cron expressions use standard 5-field syntax, interpreted in the **server PC's local timezone**.
+- Persistence is JSON files; swap the `*Store` classes for EF Core + a database if you ever need history/multi-instance.
 - There's no auth — run it locally or behind your own gateway.
