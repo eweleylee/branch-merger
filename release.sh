@@ -68,29 +68,27 @@ vpk pack \
   --packTitle   "Branch Merger" \
   --outputDir   "$RELEASES"
 
-# --- folder-picker install bundle (tiny launcher + Setup, zipped → one download) --
+# --- first-install wizard (Inno Setup wrapping the silent Velopack Setup) ----------
 INSTALLER="$ROOT/installer"
 SETUP_EXE="$RELEASES/BranchMerger-win-Setup.exe"
-if [ -f "$SETUP_EXE" ]; then
-  echo "==> Building install bundle (folder picker)"
-  STAGE="$INSTALLER/stage"
-  rm -rf "$STAGE"; mkdir -p "$STAGE"
-  cp -f "$INSTALLER/Install-BranchMerger.ps1" "$STAGE/"
-  cp -f "$INSTALLER/Install Branch Merger.cmd" "$STAGE/"
-  cp -f "$SETUP_EXE" "$STAGE/"
-  ZIP="$RELEASES/BranchMerger-Installer.zip"
-  rm -f "$ZIP"
-  if command -v zip >/dev/null 2>&1; then
-    ( cd "$STAGE" && zip -q -r "$ZIP" . )
-  else
-    powershell -NoProfile -Command "Compress-Archive -Path '$STAGE/*' -DestinationPath '$ZIP' -Force"
-  fi
-  rm -rf "$STAGE"
+ISCC=""
+for c in "$LOCALAPPDATA/Programs/Inno Setup 6/ISCC.exe" \
+         "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+         "/c/Program Files/Inno Setup 6/ISCC.exe"; do
+  [ -f "$c" ] && ISCC="$c" && break
+done
+if [ -f "$SETUP_EXE" ] && [ -n "$ISCC" ]; then
+  echo "==> Building install wizard (Inno Setup)"
+  cp -f "$SETUP_EXE" "$INSTALLER/BranchMerger-win-Setup.exe"
+  "$ISCC" "/DMyVersion=$VERSION" "/O$RELEASES" "$INSTALLER/branch-merger.iss" >/dev/null
+  rm -f "$INSTALLER/BranchMerger-win-Setup.exe"
+elif [ -f "$SETUP_EXE" ]; then
+  echo "    (Inno Setup not found - skipping the wizard. Install: winget install JRSoftware.InnoSetup)"
 fi
 
 echo ""
 echo "Done. Release assets for v$VERSION are in:  $RELEASES"
-echo "First-install with folder picker: BranchMerger-Installer.zip (extract, run 'Install Branch Merger.cmd')"
+echo "First-install wizard: BranchMerger-Setup.exe (folder picker; Velopack runs silently inside)"
 echo ""
 echo "Next (manual): GitHub -> Releases -> Draft a new release"
 echo "  * Tag:  v$VERSION   (must match <Version>)"
