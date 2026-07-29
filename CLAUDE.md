@@ -163,15 +163,18 @@ scoped via Angular's default emulated encapsulation, like Vue's `scoped`).
 Dev: `proxy.conf.json` proxies `/api` → `localhost:5080` (dev server on `:5173`). Build
 output is `frontend/dist/browser/` (copied into `wwwroot/` for production; no proxy — same origin).
 
-### Installer (`installer/`)
-A tiny **first-install folder picker**: `Install-BranchMerger.ps1` (a WinForms dialog via
-Windows' built-in .NET — recommended path pre-filled, Browse, Install) launched by
-`Install Branch Merger.cmd` (`-STA -ExecutionPolicy Bypass`). On Install it runs Velopack's
-`Setup.exe --installto <chosen>`. No bundled runtime, so `pack.ps1` zips just these two
-scripts + `Setup.exe` into **`BranchMerger-Installer.zip`** (~48 MB). Updates afterward are
-in-app (Velopack) and always apply in the chosen location. Uninstall is the native Velopack
-one (Windows Apps & features / `Update.exe --uninstall`) + the keep/remove-data prompt from
-`UninstallHook`.
+### Installer (`installer/branch-merger.iss`)
+A single cohesive **Inno Setup wizard** (welcome + folder page + progress + finish) that owns
+the whole visible first-install experience, then runs Velopack's `Setup.exe --silent
+--installto {app}` **hidden** inside it — so the user never sees a second (Velopack) window,
+yet it's a real Velopack install (auto-update keeps working). Per-user (`PrivilegesRequired=
+lowest`, default `{localappdata}\BranchMerger`) so later Velopack updates stay silent/no-admin.
+`Uninstallable=no` — uninstall is left to Velopack (Windows Apps & features + the
+keep/remove-data prompt from `UninstallHook`), so there's only one uninstall entry.
+`pack.ps1`/`release.sh` compile it with **ISCC** (Inno Setup 6, install via
+`winget install JRSoftware.InnoSetup`), embedding the freshly-built `Setup.exe`, producing
+**`BranchMerger-Setup.exe`** (~49 MB — the file users download). If ISCC isn't found the step
+is skipped with a note and only the raw Velopack `Setup.exe` is produced.
 
 ### Demo (separate project, not in this repo)
 Historically a mock-backed copy of the frontend (no C#, no git) was shipped as
@@ -210,7 +213,9 @@ dotnet tool install -g vpk         # one time
 release), builds the frontend, publishes the backend **self-contained win-x64**
 (NOT single-file — Velopack repackages), copies the UI into `wwwroot/`, then runs
 `vpk pack` → `releases/` with `Setup.exe` + `*-full.nupkg` + `releases.win.json`, and
-finally zips the folder-picker installer into `BranchMerger-Installer.zip`.
+finally compiles the Inno wizard (`installer/branch-merger.iss` via ISCC) into
+**`BranchMerger-Setup.exe`** (the file users download; needs Inno Setup —
+`winget install JRSoftware.InnoSetup`).
 Velopack installs **per-user** to `%LocalAppData%\BranchMerger` by default (no admin);
 `Setup.exe --installto <dir>` (used by the folder-picker) installs elsewhere and updates
 track that location. The in-app **"Update now"** button downloads + applies + restarts

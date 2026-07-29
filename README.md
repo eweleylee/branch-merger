@@ -136,12 +136,15 @@ prints the resolved location on startup. (Older builds that stored data next to 
 executable are migrated automatically on first run.)
 
 ## Installing & uninstalling (Windows)
-Two ways to install from a GitHub release:
-- **`BranchMerger-Installer.zip`** — extract and run **`Install Branch Merger.cmd`**. It shows
-  a folder picker pre-filled with the recommended location (`%LocalAppData%\BranchMerger`);
-  keep it or choose another, then it installs there.
-- **`BranchMerger-win-Setup.exe`** — installs silently to the default location. For a custom
-  path from the command line: `BranchMerger-win-Setup.exe --installto "D:\Apps\BranchMerger"`.
+Download **`BranchMerger-Setup.exe`** from the GitHub release and run it — a normal install
+wizard (welcome → **choose the folder**, pre-filled with `%LocalAppData%\BranchMerger` →
+install). It's one seamless wizard; the real installer runs silently underneath. Keep the
+recommended location or pick your own.
+
+The release also carries `releases.win.json` and the `.nupkg` — those aren't downloaded by
+users; the installed app reads them for auto-update. (`BranchMerger-win-Setup.exe` is the raw
+silent installer, embedded inside `BranchMerger-Setup.exe`; for a scripted custom-path install
+you can still run `BranchMerger-win-Setup.exe --installto "D:\Apps\BranchMerger"`.)
 
 The app runs in the background (no console) and starts on Windows login (toggle in Settings).
 
