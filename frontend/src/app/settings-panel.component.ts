@@ -134,9 +134,17 @@ export class SettingsPanelComponent {
 
   async load() {
     this.loading = true;
-    try { const data = await this.api.getSettings(); this.s = data.settings; await this.checkRepo(); }
-    catch (e: any) { this.message = { ok: false, text: e.message }; }
-    finally { this.loading = false; }
+    try {
+      const data = await this.api.getSettings();   // fast: just JSON, no git
+      this.s = data.settings;
+    } catch (e: any) {
+      this.message = { ok: false, text: e.message };
+    } finally {
+      this.loading = false;   // show the form right away
+    }
+    // Repo status waits behind the git lock (a background fetch can hold it for seconds),
+    // so run it in the background instead of blocking the panel from opening.
+    this.checkRepo();
   }
 
   // Plain status read against the saved config (used on load and after a save).
