@@ -7,7 +7,7 @@ namespace BranchMerger.Api.Services;
 public interface IGitService
 {
     Task<IReadOnlyList<BranchInfo>> GetBranchesAsync(CancellationToken ct = default);
-    Task FetchAsync(CancellationToken ct = default);
+    Task FetchAsync(Func<string, Task>? onStep = null, CancellationToken ct = default);
     Task<MergeResult> MergeAsync(string source, string target, bool push,
         Func<string, Task>? onStep = null, CancellationToken ct = default);
     Task<RepoStatus> GetRepoStatusAsync(CancellationToken ct = default);
@@ -173,13 +173,18 @@ public class GitService : IGitService
         finally { _gate.Release(); }
     }
 
-    public async Task FetchAsync(CancellationToken ct = default)
+    public async Task FetchAsync(Func<string, Task>? onStep = null, CancellationToken ct = default)
     {
         if (!RepoPathUsable()) return;   // nothing to fetch until the repo is set up
         await _gate.WaitAsync(ct);
         try
         {
+            var head = $"$ git fetch {Cfg.RemoteName} --prune";
+            if (onStep != null) await onStep(head);                 // live progress (Refresh button)
+
             var r = await RunAsync($"fetch {Cfg.RemoteName} --prune", ct);
+            if (onStep != null)
+                await onStep(string.IsNullOrWhiteSpace(r.Combined) ? "(up to date)" : r.Combined);
             if (r.ExitCode != 0)
                 _log.LogWarning("git fetch failed: {Err}", r.Combined);
         }

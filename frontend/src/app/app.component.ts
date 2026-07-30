@@ -57,7 +57,7 @@ import { LogViewerComponent } from './log-viewer.component';
 
     <div class="grid">
       <app-merge-panel [branches]="branches" [branchesUpdatedAt]="branchesUpdatedAt" [refreshing]="refreshing"
-        (refresh)="forceRefresh()" (scheduled)="loadSchedules()"></app-merge-panel>
+        [fetchProcess]="fetchLines" (refresh)="forceRefresh()" (scheduled)="loadSchedules()"></app-merge-panel>
       <app-schedule-list [schedules]="schedules" (changed)="loadSchedules()"></app-schedule-list>
     </div>
 
@@ -105,6 +105,7 @@ export class AppComponent implements OnInit, OnDestroy {
   branchesUpdatedAt: string | null = null;
   branchError: string | null = null;
   refreshing = false;
+  fetchLines: string[] = [];
   schedules: any[] = [];
   notifications: any[] = [];
   unread = 0;
@@ -154,10 +155,12 @@ export class AppComponent implements OnInit, OnDestroy {
 
   async forceRefresh() {
     this.refreshing = true;
+    this.fetchLines = [];                 // clear the fetch process box each run
     try {
-      const data = await this.api.refreshBranches();
-      this.branches = data.branches || [];
-      this.branchesUpdatedAt = data.lastUpdatedUtc;
+      await this.api.refreshStream(
+        line => this.fetchLines.push(line),
+        res => { this.branches = res.branches || []; this.branchesUpdatedAt = res.lastUpdatedUtc; }
+      );
     } catch (e: any) { this.branchError = e.message; }
     finally { this.refreshing = false; }
   }
