@@ -184,6 +184,7 @@ Results are cached (~6h) to stay under GitHub's rate limit.
 |--------|-------|---------|
 | GET | `/api/branches` | Cached branch list (remote branches) + last-updated time |
 | POST | `/api/branches/refresh` | Force an immediate fetch |
+| POST | `/api/branches/refresh/stream` | Force a fetch, streaming the git step live (SSE) |
 | POST | `/api/merge` | Merge now `{ sourceBranch, targetBranch, push }` |
 | POST | `/api/merge/stream` | Merge now, streaming each git step live (SSE) |
 | GET | `/api/schedules` | List schedules |

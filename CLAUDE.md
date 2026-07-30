@@ -113,7 +113,9 @@ are Windows-only and only act for an installed (Velopack) build.
   `RetentionDays` (default 30) on startup and every 12h (`LogCleanup.Run`).
 
 **Controllers/** (`api/...`)
-- `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`.
+- `BranchesController` — `GET /api/branches` (cache), `POST /api/branches/refresh`,
+  `POST /api/branches/refresh/stream` (SSE: streams the `git fetch` step live, then a
+  `result` event with the refreshed branch list — powers the Refresh process box).
 - `MergeController` — `POST /api/merge` (instant); `POST /api/merge/stream` (SSE: streams
   each git step live as `step` events, then a final `result` event); notifies on conflict.
 - `SchedulesController` — CRUD + `PUT /api/schedules/reorder` + `POST /{id}/toggle`.
@@ -150,6 +152,8 @@ scoped via Angular's default emulated encapsulation, like Vue's `scoped`).
 - `merge-panel.component.ts` — source/target via `app-branch-select`, push toggle, mode
   segments (now / once / cron), live cron echo + next-run, merge/schedule actions. "Merge now"
   streams git steps into a **live process box** (`ApiService.mergeStream` → SSE), cleared each run.
+  Refresh streams the `git fetch` step into its own process box too (`[fetchProcess]` from the app,
+  fed by `ApiService.refreshStream`).
 - `branch-select.component.ts` — **searchable, accessible combobox** (`[(value)]`; type to
   filter, arrow/Enter/Esc, click-outside via `@HostListener`, ARIA); shows short names only.
 - `schedule-list.component.ts` — rows **grouped by run time**; **drag-to-reorder within a
@@ -158,7 +162,9 @@ scoped via Angular's default emulated encapsulation, like Vue's `scoped`).
 - `log-viewer.component.ts` — modal (📄 header button); date selector (newest first),
   entries **newest-first** with level badges, capped to the 3000 most recent.
 - `settings-panel.component.ts` — Repository + Startup sections (path, URL, remote, fetch
-  interval, default branch, run-on-startup; Check status / Clone).
+  interval, default branch, run-on-startup; Check status / Clone). No repo-status check on
+  open (it waits on the git lock); **Check status** applies the on-screen values first, then
+  checks (like Clone).
 
 Dev: `proxy.conf.json` proxies `/api` → `localhost:5080` (dev server on `:5173`). Build
 output is `frontend/dist/browser/` (copied into `wwwroot/` for production; no proxy — same origin).
