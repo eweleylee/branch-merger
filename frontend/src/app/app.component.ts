@@ -56,8 +56,8 @@ import { LogViewerComponent } from './log-viewer.component';
     </div>
 
     <div class="grid">
-      <app-merge-panel [branches]="branches" [branchesUpdatedAt]="branchesUpdatedAt" [refreshing]="refreshing"
-        [fetchProcess]="fetchLines" (refresh)="forceRefresh()" (scheduled)="loadSchedules()"></app-merge-panel>
+      <app-merge-panel [branches]="branches" [branchesUpdatedAt]="branchesUpdatedAt"
+        (refreshed)="onRefreshed($event)" (scheduled)="loadSchedules()"></app-merge-panel>
       <app-schedule-list [schedules]="schedules" (changed)="loadSchedules()"></app-schedule-list>
     </div>
 
@@ -104,8 +104,6 @@ export class AppComponent implements OnInit, OnDestroy {
   branches: any[] = [];
   branchesUpdatedAt: string | null = null;
   branchError: string | null = null;
-  refreshing = false;
-  fetchLines: string[] = [];
   schedules: any[] = [];
   notifications: any[] = [];
   unread = 0;
@@ -153,16 +151,20 @@ export class AppComponent implements OnInit, OnDestroy {
     } catch (e: any) { this.branchError = e.message; }
   }
 
+  // MergePanel owns the Refresh button (it streams the fetch into its process box) and emits
+  // the result here so the app's branch list stays in sync.
+  onRefreshed(res: any) {
+    this.branches = res.branches || [];
+    this.branchesUpdatedAt = res.lastUpdatedUtc;
+  }
+
+  // Plain re-fetch used programmatically (e.g. after settings are saved) — no process box.
   async forceRefresh() {
-    this.refreshing = true;
-    this.fetchLines = [];                 // clear the fetch process box each run
     try {
-      await this.api.refreshStream(
-        line => this.fetchLines.push(line),
-        res => { this.branches = res.branches || []; this.branchesUpdatedAt = res.lastUpdatedUtc; }
-      );
+      const data = await this.api.refreshBranches();
+      this.branches = data.branches || [];
+      this.branchesUpdatedAt = data.lastUpdatedUtc;
     } catch (e: any) { this.branchError = e.message; }
-    finally { this.refreshing = false; }
   }
 
   async loadSchedules() { try { this.schedules = await this.api.getSchedules(); } catch {} }

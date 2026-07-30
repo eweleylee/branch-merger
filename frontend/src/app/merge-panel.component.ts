@@ -16,19 +16,10 @@ import { describeCron, nextRun, formatNext, CronInfo } from './cron';
       <h2>Merge branches</h2>
       <div class="updated">
         <span *ngIf="branchesUpdatedAt">branches updated {{ formatTime(branchesUpdatedAt) }}</span>
-        <button class="btn-ghost small" [disabled]="refreshing || busy()" (click)="refresh.emit()">
+        <button class="btn-ghost small" [disabled]="refreshing || busy()" (click)="doRefresh()">
           <span *ngIf="refreshing" class="spinner"></span>{{ refreshing ? 'Refreshing…' : '↻ Refresh' }}
         </button>
       </div>
-    </div>
-
-    <!-- Live fetch process: shows the git fetch step while Refresh runs. -->
-    <div *ngIf="refreshing || fetchProcess.length" class="process">
-      <div class="process-head">
-        <span *ngIf="refreshing" class="spinner"></span>
-        <strong>{{ refreshing ? 'Fetching branches…' : 'Last fetch' }}</strong>
-      </div>
-      <pre>{{ fetchProcess.join('\n') }}</pre>
     </div>
 
     <div class="merge-row">
@@ -83,10 +74,10 @@ import { describeCron, nextRun, formatNext, CronInfo } from './cron';
       </button>
     </div>
 
-    <div *ngIf="mode==='now' && (busy() || processLines.length)" class="process">
+    <div *ngIf="busy() || refreshing || processLines.length" class="process">
       <div class="process-head">
-        <span *ngIf="busy()" class="spinner"></span>
-        <strong>{{ busy() ? 'Merging…' : 'Merge process' }}</strong>
+        <span *ngIf="busy() || refreshing" class="spinner"></span>
+        <strong>{{ processHeading }}</strong>
       </div>
       <pre #processBox>{{ processLines.join('\n') }}</pre>
     </div>
@@ -139,14 +130,14 @@ import { describeCron, nextRun, formatNext, CronInfo } from './cron';
 export class MergePanelComponent {
   @Input() branches: any[] = [];
   @Input() branchesUpdatedAt: string | null = null;
-  @Input() refreshing = false;
-  @Input() fetchProcess: string[] = [];
-  @Output() refresh = new EventEmitter<void>();
+  @Output() refreshed = new EventEmitter<any>();   // { branches, lastUpdatedUtc } from a fetch
   @Output() scheduled = new EventEmitter<void>();
 
   @ViewChild('processBox') processBox?: ElementRef<HTMLElement>;
 
   readonly busy = busySignal;
+  refreshing = false;
+  processKind: 'merge' | 'fetch' = 'merge';   // which activity the shared process box shows
 
   source = '';
   target = '';
@@ -165,6 +156,31 @@ export class MergePanelComponent {
   get cronNext(): string { return this.cronInfo.ok ? formatNext(nextRun(this.cron)) : ''; }
   get canSubmit(): boolean { return !!this.source && !!this.target && this.source !== this.target && !this.busy(); }
 
+  // Heading for the shared process box (used by both merge and refresh).
+  get processHeading(): string {
+    if (this.busy()) return 'Merging…';
+    if (this.refreshing) return 'Fetching branches…';
+    return this.processKind === 'fetch' ? 'Last fetch' : 'Merge process';
+  }
+
+  // Refresh runs the fetch and streams its git step into the same process box as merges.
+  async doRefresh() {
+    this.refreshing = true;
+    this.processKind = 'fetch';
+    this.result = null;
+    this.processLines = [];
+    try {
+      await this.api.refreshStream(
+        line => this.pushLine(line),
+        res => this.refreshed.emit(res)
+      );
+    } catch (e: any) {
+      this.result = { ok: false, message: e.message };
+    } finally {
+      this.refreshing = false;
+    }
+  }
+
   formatTime(iso: string) { return new Date(iso).toLocaleTimeString(); }
 
   private pushLine(line: string) {
@@ -176,6 +192,7 @@ export class MergePanelComponent {
     this.busy.set(true);
     this.result = null;
     this.processLines = [];
+    this.processKind = 'merge';
     try {
       await this.api.mergeStream(
         { sourceBranch: this.source, targetBranch: this.target, push: this.push },
