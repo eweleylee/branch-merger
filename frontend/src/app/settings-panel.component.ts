@@ -49,7 +49,7 @@ import { ApiService, ApiError } from './api.service';
             <span *ngIf="repoStatus.currentBranch" class="muted"> · on {{ repoStatus.currentBranch }}</span>
           </div>
           <div class="row-btns">
-            <button class="btn-ghost small" [disabled]="checking" (click)="checkRepo()">
+            <button class="btn-ghost small" [disabled]="checking" (click)="checkStatus()">
               <span *ngIf="checking" class="spinner"></span>{{ checking ? 'Checking…' : 'Check status' }}
             </button>
             <button class="btn-primary small" [disabled]="cloning" (click)="cloneRepo()">
@@ -139,11 +139,25 @@ export class SettingsPanelComponent {
     finally { this.loading = false; }
   }
 
+  // Plain status read against the saved config (used on load and after a save).
   async checkRepo() {
     this.checking = true;
     try { this.repoStatus = await this.api.getRepoStatus(); }
     catch (e: any) { this.repoStatus = { ready: false, message: e.message }; }
     finally { this.checking = false; }
+  }
+
+  // The "Check status" button: apply what's on screen first, then check — so it reflects the
+  // path/URL you just typed without a separate Save (essential on first-time setup).
+  async checkStatus() {
+    this.checking = true; this.message = null;
+    try {
+      await this.api.saveSettings(this.s);
+      this.repoStatus = await this.api.getRepoStatus();
+      this.saved.emit();   // settings were persisted; let the app pick up the new repo
+    } catch (e: any) {
+      this.repoStatus = { ready: false, message: e.message };
+    } finally { this.checking = false; }
   }
 
   async save() {
