@@ -36,6 +36,31 @@ export class ApiService {
   getBranches() { return this.req('/api/branches'); }
   refreshBranches() { return this.req('/api/branches/refresh', { method: 'POST' }); }
 
+  /** Streaming refresh: onStep(line) for each git-fetch line, then onResult({branches,lastUpdatedUtc}). */
+  async refreshStream(onStep: (line: string) => void, onResult: (r: any) => void): Promise<void> {
+    const res = await fetch('/api/branches/refresh/stream', { method: 'POST' });
+    if (!res.ok || !res.body) throw new Error(`Refresh failed (${res.status})`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let gotResult = false;
+
+    for (; ;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const evt = parseSSE(buf.slice(0, sep));
+        buf = buf.slice(sep + 2);
+        if (evt.event === 'step') onStep(evt.data);
+        else if (evt.event === 'result') { gotResult = true; onResult(JSON.parse(evt.data)); }
+      }
+    }
+    if (!gotResult) throw new Error('The refresh ended without a result.');
+  }
+
   merge(payload: any) { return this.req('/api/merge', { method: 'POST', body: JSON.stringify(payload) }); }
 
   /** Streaming merge: onStep(line) per git step, then onResult(mergeResult). */

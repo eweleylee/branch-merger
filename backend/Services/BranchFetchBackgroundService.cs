@@ -33,7 +33,7 @@ public class BranchFetchBackgroundService : BackgroundService
             try
             {
                 var git = _sp.GetRequiredService<IGitService>();
-                await git.FetchAsync(stoppingToken);
+                await git.FetchAsync(ct: stoppingToken);
                 var branches = await git.GetBranchesAsync(stoppingToken);
                 _cache.Set(branches);
             }

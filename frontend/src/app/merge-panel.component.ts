@@ -22,6 +22,15 @@ import { describeCron, nextRun, formatNext, CronInfo } from './cron';
       </div>
     </div>
 
+    <!-- Live fetch process: shows the git fetch step while Refresh runs. -->
+    <div *ngIf="refreshing || fetchProcess.length" class="process">
+      <div class="process-head">
+        <span *ngIf="refreshing" class="spinner"></span>
+        <strong>{{ refreshing ? 'Fetching branches…' : 'Last fetch' }}</strong>
+      </div>
+      <pre>{{ fetchProcess.join('\n') }}</pre>
+    </div>
+
     <div class="merge-row">
       <div class="field">
         <label>Merge from (source)</label>
@@ -131,6 +140,7 @@ export class MergePanelComponent {
   @Input() branches: any[] = [];
   @Input() branchesUpdatedAt: string | null = null;
   @Input() refreshing = false;
+  @Input() fetchProcess: string[] = [];
   @Output() refresh = new EventEmitter<void>();
   @Output() scheduled = new EventEmitter<void>();
 
