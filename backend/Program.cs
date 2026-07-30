@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Sockets;
 using BranchMerger.Api.Services;
 using Velopack;
 
@@ -12,6 +13,18 @@ if (OperatingSystem.IsWindows())
 velopackApp.Run();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// --- Single instance ---
+// If an instance is already serving the app URL, don't start a second one. A manual /
+// Start-Menu launch just opens the browser to the running instance; an autostart (--startup)
+// launch simply exits. Only the first instance actually starts the server.
+var appUrl = (builder.Configuration["Urls"] ?? "http://localhost:5080").Split(';')[0];
+var launchedAtStartup = args.Contains("--startup");
+if (IsAlreadyRunning(appUrl))
+{
+    if (!launchedAtStartup) TryOpenBrowser(appUrl);
+    return;
+}
 
 // --- File logging → daily files in the data dir (level from FileLog:MinimumLevel) ---
 // Errors incl. merge conflicts (logged at Error) are captured. Useful now Release builds
@@ -75,25 +88,34 @@ app.UseStaticFiles();
 app.MapControllers();
 app.MapFallbackToFile("index.html");   // let the SPA handle client-side routes / refreshes
 
-// Launched at Windows login (via the startup entry) → run quietly, don't pop the browser.
-var isStartupLaunch = args.Contains("--startup");
-
 // In the packaged (production) build, print the URL and open the browser on start
-// (unless this was an automatic startup launch).
-if (!app.Environment.IsDevelopment() && !isStartupLaunch)
+// (unless this was an automatic startup launch — the login instance runs quietly).
+if (!app.Environment.IsDevelopment() && !launchedAtStartup)
 {
-    var url = (builder.Configuration["Urls"] ?? "http://localhost:5080").Split(';')[0];
     app.Lifetime.ApplicationStarted.Register(() =>
     {
         Console.WriteLine();
-        Console.WriteLine($"  Branch Merger is running →  {url}");
+        Console.WriteLine($"  Branch Merger is running →  {appUrl}");
         Console.WriteLine("  Keep this window open. Close it to stop the app.");
         Console.WriteLine();
-        TryOpenBrowser(url);
+        TryOpenBrowser(appUrl);
     });
 }
 
 app.Run();
+
+// True if something is already listening on the app URL's host:port (i.e. another instance
+// is serving). Connection-refused returns fast; a short timeout bounds the worst case.
+static bool IsAlreadyRunning(string url)
+{
+    try
+    {
+        var uri = new Uri(url);
+        using var client = new TcpClient();
+        return client.ConnectAsync(uri.Host, uri.Port).Wait(600) && client.Connected;
+    }
+    catch { return false; }
+}
 
 static void TryOpenBrowser(string url)
 {

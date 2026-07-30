@@ -56,6 +56,11 @@ install/update/uninstall hooks; a no-op under `dotnet run`). On Windows it regis
 (dev), static file serving + SPA fallback, applies the run-on-startup preference
 (`WindowsStartup.Apply`), and auto-opens the browser on start when not in Development —
 **unless** launched with `--startup` (the login autostart passes it so boot is quiet).
+**Single instance:** right after the builder is created, if something is already serving the
+app URL (`IsAlreadyRunning` — a quick TCP probe of `Urls`), the process doesn't start a second
+server — a manual/Start-Menu launch just opens the browser to the running instance, a
+`--startup` launch simply exits. So clicking the shortcut while it's already running in the
+background reuses that instance instead of failing to bind the port.
 
 **Windowless / autostart:** Release/published builds are **`OutputType=WinExe`** (set in the
 csproj) so the installed app runs in the **background with no console window**; Debug
