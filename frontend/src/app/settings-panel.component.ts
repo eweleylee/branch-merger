@@ -142,17 +142,8 @@ export class SettingsPanelComponent {
     } finally {
       this.loading = false;   // show the form right away
     }
-    // Repo status waits behind the git lock (a background fetch can hold it for seconds),
-    // so run it in the background instead of blocking the panel from opening.
-    this.checkRepo();
-  }
-
-  // Plain status read against the saved config (used on load and after a save).
-  async checkRepo() {
-    this.checking = true;
-    try { this.repoStatus = await this.api.getRepoStatus(); }
-    catch (e: any) { this.repoStatus = { ready: false, message: e.message }; }
-    finally { this.checking = false; }
+    // No repo-status check on open — it waits behind the git lock and can stall the panel.
+    // The user runs it explicitly with the "Check status" button.
   }
 
   // The "Check status" button: apply what's on screen first, then check — so it reflects the
@@ -174,7 +165,6 @@ export class SettingsPanelComponent {
       const data = await this.api.saveSettings(this.s);
       this.s = data.settings;
       this.message = { ok: true, text: 'Settings saved.' };
-      await this.checkRepo();
       this.saved.emit();
     } catch (e: any) { this.message = { ok: false, text: e.message }; }
     finally { this.saving = false; }
